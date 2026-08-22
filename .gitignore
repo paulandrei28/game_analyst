@@ -48,3 +48,7 @@ ENV.venv/
 # Operating System files
 .DS_Store
 Thumbs.db
+
+# Generated analysis history
+analysis_history/
+team_streaks_history/

@@ -1,4 +1,8 @@
+import logging
+from datetime import datetime
 from playwright.async_api import async_playwright
+
+LOGGER = logging.getLogger(__name__)
 
 TOP_TOURNAMENTS = [
     "premier-league",
@@ -32,6 +36,7 @@ class SofascoreUpcomingScraper:
         self.viewport = {"width": 1280, "height": 720}
 
     async def get_upcoming_games(self):
+        LOGGER.info("Starting Sofascore upcoming-games scrape")
         async with async_playwright() as p:
             # 1. Launch browser context
             browser = await p.chromium.launch(headless=self.headless)
@@ -39,6 +44,9 @@ class SofascoreUpcomingScraper:
                 user_agent=self.user_agent, viewport=self.viewport  # type: ignore
             )
             page = await context.new_page()
+
+            # Get today's local date string (YYYY-MM-DD) to use as a strict validation filter
+            today_date_str = datetime.now().strftime("%Y-%m-%d")
 
             # Dictionary to ensure we capture unique matches by their event ID
             upcoming_matches = {}
@@ -57,29 +65,42 @@ class SofascoreUpcomingScraper:
                                 .get("slug")
                             )
 
-                            # Isolate fixtures that haven't kicked off yet
+                            # Extract the exact match date from its Unix start timestamp
+                            start_timestamp = event.get("startTimestamp")
+                            match_date_str = ""
+                            if start_timestamp:
+                                match_date_str = datetime.fromtimestamp(
+                                    start_timestamp
+                                ).strftime("%Y-%m-%d")
+
+                            # Isolate fixtures that haven't kicked off yet, match top tournaments, AND belong to today
                             if (
                                 status_type == "notstarted"
                                 and tournament_slug in TOP_TOURNAMENTS_SET
+                                and match_date_str == today_date_str
                             ):
                                 event_id = event.get("id")
                                 if event_id:
                                     upcoming_matches[event_id] = event
                     except Exception:
-                        pass
+                        LOGGER.debug(
+                            "Could not process a scheduled-events response",
+                            exc_info=True,
+                        )
 
             # Attach network sniffer to the page instance
             page.on("response", handle_response)
 
             # 3. Trigger the initial UI stream loading flow
-            print("Opening Sofascore...")
+            LOGGER.info("Opening Sofascore")
             await page.goto("https://www.sofascore.com", wait_until="networkidle")
 
             # 4. Use the default layout telemetry data without checking the UI filter.
-            print("Using default layout telemetry data...")
+            LOGGER.info("Waiting for today's scheduled events (%s)", today_date_str)
             await page.wait_for_timeout(3000)
 
             await browser.close()
+            LOGGER.info("Captured %d upcoming matches", len(upcoming_matches))
 
             # 5. Format and process the captured event models into "Home - Away" lists
             formatted_games_list = []
@@ -91,4 +112,7 @@ class SofascoreUpcomingScraper:
                 match_string = f"{home_team} - {away_team}"
                 formatted_games_list.append(match_string)
 
+            LOGGER.info(
+                "Returning %d formatted upcoming games", len(formatted_games_list)
+            )
             return formatted_games_list
