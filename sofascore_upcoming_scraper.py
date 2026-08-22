@@ -1,6 +1,29 @@
-import asyncio
-from datetime import datetime
 from playwright.async_api import async_playwright
+
+TOP_TOURNAMENTS = [
+    "premier-league",
+    "fa-cup",
+    "laliga",
+    "copa-del-rey",
+    "serie-a",
+    "coppa-italia",
+    "bundesliga",
+    "dfb-pokal",
+    "ligue-1",
+    "coupe-de-france",
+    "eredivisie",
+    "primeira-liga",
+    "taca-de-portugal",
+    "pro-league",
+    "super-lig",
+    "premiership",
+    "uefa-champions-league",
+    "uefa-europa-league",
+    "uefa-conference-league",
+    "uefa-super-cup",
+]
+TOP_TOURNAMENTS_SET = set(TOP_TOURNAMENTS)
+
 
 class SofascoreUpcomingScraper:
     def __init__(self, headless=True):
@@ -13,8 +36,7 @@ class SofascoreUpcomingScraper:
             # 1. Launch browser context
             browser = await p.chromium.launch(headless=self.headless)
             context = await browser.new_context(
-                user_agent=self.user_agent,
-                viewport=self.viewport
+                user_agent=self.user_agent, viewport=self.viewport  # type: ignore
             )
             page = await context.new_page()
 
@@ -29,9 +51,17 @@ class SofascoreUpcomingScraper:
                         events = data.get("events", [])
                         for event in events:
                             status_type = event.get("status", {}).get("type")
-                            
+                            tournament_slug = (
+                                event.get("tournament", {})
+                                .get("uniqueTournament", {})
+                                .get("slug")
+                            )
+
                             # Isolate fixtures that haven't kicked off yet
-                            if status_type == "notstarted":
+                            if (
+                                status_type == "notstarted"
+                                and tournament_slug in TOP_TOURNAMENTS_SET
+                            ):
                                 event_id = event.get("id")
                                 if event_id:
                                     upcoming_matches[event_id] = event
@@ -44,27 +74,19 @@ class SofascoreUpcomingScraper:
             # 3. Trigger the initial UI stream loading flow
             print("Opening Sofascore...")
             await page.goto("https://www.sofascore.com", wait_until="networkidle")
-            
-            # 4. Interact with the layout to pull upcoming matches specifically
-            try:
-                print("Clicking the 'Upcoming' filter tab inside the UI...")
-                upcoming_button = page.get_by_role("button", name="Upcoming", exact=True).first
-                await upcoming_button.click()
-                
-                print("Filter applied successfully. Streaming network packets...")
-                await page.wait_for_timeout(5000)  # Wait for the background AJAX pipe to conclude
-            except Exception:
-                print("Could not locate the 'Upcoming' tab. Falling back to default layout telemetry data...")
-                await page.wait_for_timeout(3000)
+
+            # 4. Use the default layout telemetry data without checking the UI filter.
+            print("Using default layout telemetry data...")
+            await page.wait_for_timeout(3000)
 
             await browser.close()
-            
+
             # 5. Format and process the captured event models into "Home - Away" lists
             formatted_games_list = []
             for event in upcoming_matches.values():
                 home_team = event.get("homeTeam", {}).get("name", "Home Team")
                 away_team = event.get("awayTeam", {}).get("name", "Away Team")
-                
+
                 # Combine teams using your required separator format
                 match_string = f"{home_team} - {away_team}"
                 formatted_games_list.append(match_string)
