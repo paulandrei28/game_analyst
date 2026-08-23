@@ -1,19 +1,15 @@
 import asyncio
-import json
 import logging
 
-from pathlib import Path
-from datetime import datetime
 from sofascore_wrapper.api import SofascoreAPI
 from sofascore_wrapper.search import Search
 from sofascore_wrapper.match import Match
-from sofascore_upcoming_scraper import SofascoreUpcomingScraper
 
 LOGGER = logging.getLogger(__name__)
 
 
-async def match(games):
-    """Return ``{game: team_streaks}`` for games from upcoming_scraper."""
+async def fetch_team_streaks(games):
+    """Return ``{game: team_streaks}`` for scraped upcoming games."""
     api = SofascoreAPI()
     results = {}
     request_interval = 5
@@ -96,29 +92,3 @@ async def match(games):
         await api.close()
 
 
-async def main():
-    LOGGER.info("Starting team streaks workflow")
-    scraper = SofascoreUpcomingScraper()
-    games = await scraper.get_upcoming_games()
-    LOGGER.info("Scraper returned %d games", len(games))
-    streaks = await match(games)
-    history_folder = Path("team_streaks_history")
-    history_folder.mkdir(parents=True, exist_ok=True)
-    output_path = history_folder / f"team_streaks_{datetime.now():%Y%m%d}.json"
-    output_path.write_text(
-        json.dumps(streaks, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    LOGGER.info("Team streaks written to %s", output_path)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    try:
-        asyncio.run(main())
-    except Exception:
-        LOGGER.exception("Team streaks workflow failed")
-        raise

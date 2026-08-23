@@ -1,48 +1,103 @@
 from __future__ import annotations
 
-import argparse
-import json
-import logging
 import math
 import re
-from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-LOGGER = logging.getLogger(__name__)
+
 
 # ============================================================
 # Configuration
 # ============================================================
 
+# Section weights are used throughout scoring, agreements,
+# relationship strength and conflict penalties.
 GENERAL_WEIGHT = 1.00
-H2H_WEIGHT = 1.45
+H2H_WEIGHT = 1.00
 
-CONFLICT_PENALTY = 45.0
-MISSING_H2H_PENALTY = 6.0
-MISSING_GENERAL_TEAM_PENALTY = 3.0
+# Direct contradiction penalty.
+PENALTY_MINOR = 20.0
+PENALTY_MAJOR = 50.0
 
-H2H_AGREEMENT_BONUS = 12.0
-TEAM_AGREEMENT_BONUS = 8.0
-
-FIRST_SCORE_CONCEDE_BONUS = 6.0
-FIRST_HALF_RESULT_BONUS = 5.0
-
+CONFLICT_PENALTY = PENALTY_MAJOR
 CONFLICT_SECONDARY_FACTOR = 0.30
 CONFLICT_REMAINDER_FACTOR = 0.10
 H2H_CONFLICT_MULTIPLIER = 1.35
 
+# ------------------------------------------------------------
+# Bonus tiers.
+#
+# Every relationship/agreement bonus below resolves to one of these
+# four tidy values. The tier reflects how directly the supporting
+# evidence confirms the candidate outcome:
+#   WEAK    - a same-direction but distinct signal (e.g. a nearby
+#             O/U threshold, or one side of a stability pattern)
+#   MEDIUM  - a single complementary relationship between two stats
+#   STRONG  - a well-established direct/equivalent relationship, or
+#             general+H2H agreement
+#   MAJOR   - a strong two-sided pattern where both teams line up
+#             the same way (BTTS, both-clean-sheet, etc.)
+#
+# Named constants below keep their descriptive name at each call
+# site for readability; their magnitude always comes from a tier.
+# ------------------------------------------------------------
+
+BONUS_WEAK = 5.0
+BONUS_MEDIUM = 10.0
+BONUS_STRONG = 15.0
+BONUS_MAJOR = 20.0
+
+# Positive confirmation bonuses.
+H2H_AGREEMENT_BONUS = BONUS_STRONG
+TEAM_AGREEMENT_BONUS = BONUS_MEDIUM
+
+# Direct/equivalent relationship weights.
+FIRST_SCORE_CONCEDE_BONUS = BONUS_STRONG
+FIRST_HALF_RESULT_BONUS = BONUS_MEDIUM
+WIN_LOSS_BONUS = BONUS_MEDIUM
+NO_GOAL_CONCEDED_SCORED_BONUS = BONUS_MEDIUM
+
+# Underlying-event relationship weights.
+NO_CLEAN_SHEET_SCORING_BONUS = BONUS_MEDIUM
+BOTH_NO_CLEAN_SHEET_BTTS_BONUS = BONUS_MAJOR
+BOTH_CLEAN_SHEET_UNDER_BONUS = BONUS_MAJOR
+BOTH_NO_GOALS_SCORED_UNDER_BONUS = BONUS_MAJOR
+CLEAN_SHEET_PLUS_NO_SCORING_UNDER_BONUS = BONUS_MAJOR
+SCORING_PATTERN_BTTS_BONUS = BONUS_MEDIUM
+SCORING_PATTERN_OVER_BONUS = BONUS_MEDIUM
+FIRST_SCORE_FIRST_HALF_BONUS = BONUS_MEDIUM
+NO_LOSS_WIN_BONUS = BONUS_WEAK
+NO_WIN_LOSS_BONUS = BONUS_WEAK
+
+# Different threshold, same-direction evidence is useful, but weaker
+# than an exact same-market confirmation.
+THRESHOLD_CONSISTENCY_BONUS = BONUS_WEAK
+MAX_THRESHOLD_DISTANCE = 1.5
+
+# How repeated relationships accumulate. There is intentionally no
+# hard cap; independent supporting relationships have diminishing returns.
+RELATIONSHIP_DIMINISHING_FACTORS = (
+    1.00,
+    0.65,
+    0.40,
+    0.25,
+    0.15,
+    0.10,
+)
+
+# Relationship conflicts are softer than direct market contradictions.
+RELATIONSHIP_CONFLICT_PENALTY = PENALTY_MINOR
+
+# Evidence score multiplier. Score is intentionally uncapped.
+EVIDENCE_SCORE_MULTIPLIER = 30.0
+
+# Sample size influence. Larger streaks get more weight, while the
+# logarithm prevents very large samples from dominating linearly.
+SAMPLE_SIZE_WEIGHT = 0.35
+
 RATIO_PRIOR_STRENGTH = 2.0
 RATIO_PRIOR_MEAN = 0.50
-
-BILATERAL_CATEGORIES = {
-    "goals_ou",
-    "cards_ou",
-    "corners_ou",
-    "btts",
-}
 
 TEAM_SPECIFIC_CATEGORIES = {
     "first_to_score",
@@ -94,16 +149,16 @@ class Candidate:
     bonuses: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class RelationshipMatch:
+    name: str
+    weight: float
+    evidences: tuple[Evidence, ...]
+
+
 # ============================================================
-# Parsing
-# ============================================================
 
-
-OU_PATTERN = re.compile(
-    r"^(More than|Less than)\s+(\d+(?:\.\d+)?)\s+(goals|corners|cards)$",
-    re.IGNORECASE,
-)
-
+OU_PATTERN = re.compile(r"^(More than|Less than)\s+(\d+(?:\.\d+)?)\s+(goals|corners|cards)$", re.IGNORECASE)
 RATIO_PATTERN = re.compile(r"^(\d+)\s*/\s*(\d+)$")
 INTEGER_PATTERN = re.compile(r"^\d+$")
 
@@ -122,7 +177,9 @@ def parse_statistic_value(value: str) -> tuple[float, int | None]:
         if denominator == 0:
             return 0.0, 0
 
-        adjusted_rate = (numerator + RATIO_PRIOR_MEAN * RATIO_PRIOR_STRENGTH) / (
+        adjusted_rate = (
+            numerator + RATIO_PRIOR_MEAN * RATIO_PRIOR_STRENGTH
+        ) / (
             denominator + RATIO_PRIOR_STRENGTH
         )
 
@@ -196,11 +253,6 @@ def parse_market(
     return None
 
 
-# ============================================================
-# Evidence extraction
-# ============================================================
-
-
 def extract_evidence(
     match_data: dict[str, Any],
 ) -> list[Evidence]:
@@ -212,7 +264,7 @@ def extract_evidence(
         stats = match_data.get(section_name, [])
 
         for stat in stats:
-            name = stat.get("name", "").strip()
+            name = str(stat.get("name", "")).strip()
             value = str(stat.get("value", "")).strip()
             team = stat.get("team")
 
@@ -238,18 +290,71 @@ def extract_evidence(
                 )
             )
 
-    return evidence
+    return deduplicate_evidence(evidence)
 
 
-# ============================================================
-# Utility
-# ============================================================
+def evidence_key(evidence: Evidence) -> tuple:
+    """Return the semantic identity of an evidence record.
+
+    The display name is intentionally excluded because Sofascore can expose
+    the same canonical statistic as "No clean sheet" and "Without clean sheet".
+    """
+
+    return (
+        evidence.market,
+        evidence.category,
+        evidence.direction,
+        evidence.section,
+        evidence.team,
+        evidence.raw_value,
+    )
+
+
+def deduplicate_evidence(evidences: list[Evidence]) -> list[Evidence]:
+    """Remove exact semantic duplicates while preserving first-seen order."""
+
+    unique: list[Evidence] = []
+    seen: set[tuple] = set()
+
+    for evidence in evidences:
+        key = evidence_key(evidence)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(evidence)
+
+    return unique
+
+
+def section_weight(evidence: Evidence) -> float:
+    """Return the configured weight for an evidence source."""
+
+    return H2H_WEIGHT if evidence.section == "head2head" else GENERAL_WEIGHT
+
+
+def sample_weight(evidence: Evidence) -> float:
+    """Weight evidence by the number of matches represented by the streak."""
+
+    if not evidence.sample_size or evidence.sample_size <= 0:
+        return 1.0
+
+    return 1.0 + SAMPLE_SIZE_WEIGHT * math.log1p(evidence.sample_size)
 
 
 def weighted_confidence(evidence: Evidence) -> float:
-    """Apply a non-linear weight to evidence confidence."""
+    """Apply non-linear confidence, sample-size and section weighting."""
 
-    return evidence.confidence**1.5
+    return (
+        evidence.confidence**1.5
+        * sample_weight(evidence)
+        * section_weight(evidence)
+    )
+
+
+def confidence_weight(evidence: Evidence) -> float:
+    """Weight used when calculating the reported confidence percentage."""
+
+    return sample_weight(evidence) * section_weight(evidence)
 
 
 def market_side(evidence: Evidence) -> str | None:
@@ -261,24 +366,55 @@ def market_side(evidence: Evidence) -> str | None:
     return None
 
 
-def has_general_team_evidence(
-    general: list[Evidence],
+def candidate_side(candidate: Candidate) -> str | None:
+    """Return the side encoded in a team-specific candidate."""
+
+    if candidate.category in TEAM_SPECIFIC_CATEGORIES:
+        side = candidate.market.rsplit("_", 1)[-1]
+        if side in {"home", "away"}:
+            return side
+
+    return None
+
+
+def candidate_threshold(candidate: Candidate) -> float | None:
+    """Extract an O/U threshold from a canonical market."""
+
+    if candidate.category not in {
+        "goals_ou",
+        "cards_ou",
+        "corners_ou",
+    }:
+        return None
+
+    parts = candidate.market.split("_")
+
+    try:
+        return float(parts[2])
+    except (IndexError, ValueError):
+        return None
+
+
+def evidence_for_team(
+    evidences: list[Evidence],
+    category: str,
     team: str,
-) -> bool:
-    """Check whether general evidence covers a specific team."""
+) -> list[Evidence]:
+    """Return evidence for a specific team/category."""
 
-    return any(e.team in {team, "both"} for e in general)
-
-
-def is_bilateral_market(candidate: Candidate) -> bool:
-    """Return whether a market benefits from evidence from both teams."""
-
-    return candidate.category in BILATERAL_CATEGORIES
+    return [
+        evidence
+        for evidence in evidences
+        if evidence.category == category and evidence.team == team
+    ]
 
 
-# ============================================================
-# Candidate generation
-# ============================================================
+def strongest_evidence(
+    evidences: list[Evidence],
+) -> Evidence | None:
+    """Return the strongest evidence record according to effective strength."""
+
+    return max(evidences, key=weighted_confidence, default=None)
 
 
 def generate_candidates(
@@ -309,93 +445,651 @@ def generate_candidates(
 
             if are_opposite_markets(supporting[0], evidence):
                 candidate.conflicting_evidences.append(evidence)
-            elif supporting_relationship(supporting[0], evidence):
+
+        relationship_matches = deduplicate_relationship_matches(
+            find_relationship_matches(candidate, evidences)
+        )
+
+        seen_supporting_keys: set[tuple] = set()
+
+        for match in relationship_matches:
+            for evidence in match.evidences:
+                key = evidence_key(evidence)
+                if evidence in candidate.evidences or key in seen_supporting_keys:
+                    continue
+
+                seen_supporting_keys.add(key)
                 candidate.supporting_evidences.append(evidence)
+
+        for evidence in find_relationship_conflicts(candidate, evidences):
+            if evidence not in candidate.evidences and evidence not in candidate.conflicting_evidences:
+                candidate.conflicting_evidences.append(evidence)
 
         candidates.append(candidate)
 
     return candidates
 
 
-# ============================================================
-# Evidence relationships
-# ============================================================
+def opposite_side(side: str) -> str:
+    return "away" if side == "home" else "home"
 
 
-def supporting_relationship(
-    candidate_evidence: Evidence,
-    other_evidence: Evidence,
-) -> bool:
-    """Return whether one evidence record directly supports another."""
+def add_pair_relationship(
+    matches: list[RelationshipMatch],
+    name: str,
+    weight: float,
+    first: Evidence | None,
+    second: Evidence | None,
+) -> None:
+    """Append a pair relationship when both evidence records exist."""
 
-    candidate_side = market_side(candidate_evidence)
-    other_side = market_side(other_evidence)
+    if first is None or second is None:
+        return
 
-    if not candidate_side or not other_side:
-        return False
-
-    if (
-        candidate_evidence.category == "first_to_score"
-        and other_evidence.category == "first_to_concede"
-    ):
-        return candidate_side != other_side
-
-    if (
-        candidate_evidence.category == "first_to_concede"
-        and other_evidence.category == "first_to_score"
-    ):
-        return candidate_side != other_side
-
-    if (
-        candidate_evidence.category == "first_half_winner"
-        and other_evidence.category == "first_half_loser"
-    ):
-        return candidate_side != other_side
-
-    if (
-        candidate_evidence.category == "first_half_loser"
-        and other_evidence.category == "first_half_winner"
-    ):
-        return candidate_side != other_side
-
-    return False
+    matches.append(
+        RelationshipMatch(
+            name=name,
+            weight=weight,
+            evidences=(first, second),
+        )
+    )
 
 
-def supporting_evidence_bonus(candidate: Candidate) -> float:
-    """Reward complementary evidence that points to the same outcome."""
+def pair_combinations(
+    left: list[Evidence],
+    right: list[Evidence],
+) -> list[tuple[Evidence, Evidence]]:
+    """Return all pair combinations from two evidence groups."""
 
-    relationships: dict[str, float] = {}
+    return [(first, second) for first in left for second in right]
 
-    for candidate_evidence in candidate.evidences:
-        for other_evidence in candidate.supporting_evidences:
-            if not supporting_relationship(candidate_evidence, other_evidence):
+
+def find_relationship_matches(
+    candidate: Candidate,
+    all_evidences: list[Evidence],
+) -> list[RelationshipMatch]:
+    """Find evidence relationships that support a candidate's outcome."""
+
+    matches: list[RelationshipMatch] = []
+    side = candidate_side(candidate)
+
+    # --------------------------------------------------------
+    # Direct complementary relationships.
+    # --------------------------------------------------------
+
+    if candidate.category in {
+        "first_to_score",
+        "first_to_concede",
+    } and side:
+        opponent = opposite_side(side)
+        opponent_first_concede = strongest_evidence(
+            evidence_for_team(all_evidences, "first_to_concede", opponent)
+        )
+
+        if candidate.category == "first_to_score":
+            add_pair_relationship(
+                matches,
+                "first to score + opponent first to concede",
+                FIRST_SCORE_CONCEDE_BONUS,
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "first_to_score", side)
+                ),
+                opponent_first_concede,
+            )
+        else:
+            add_pair_relationship(
+                matches,
+                "first to concede + opponent first to score",
+                FIRST_SCORE_CONCEDE_BONUS,
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "first_to_concede", side)
+                ),
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "first_to_score", opponent)
+                ),
+            )
+
+    if candidate.category in {"wins", "losses"} and side:
+        opponent = opposite_side(side)
+
+        if candidate.category == "wins":
+            add_pair_relationship(
+                matches,
+                "win + opponent loss",
+                WIN_LOSS_BONUS,
+                strongest_evidence(evidence_for_team(all_evidences, "wins", side)),
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "losses", opponent)
+                ),
+            )
+        else:
+            add_pair_relationship(
+                matches,
+                "loss + opponent win",
+                WIN_LOSS_BONUS,
+                strongest_evidence(evidence_for_team(all_evidences, "losses", side)),
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "wins", opponent)
+                ),
+            )
+
+    if candidate.category in {"no_goals_conceded", "no_goals_scored"} and side:
+        opponent = opposite_side(side)
+
+        if candidate.category == "no_goals_conceded":
+            add_pair_relationship(
+                matches,
+                "clean-sheet tendency + opponent no scoring",
+                NO_GOAL_CONCEDED_SCORED_BONUS,
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "no_goals_conceded", side)
+                ),
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "no_goals_scored", opponent)
+                ),
+            )
+        else:
+            add_pair_relationship(
+                matches,
+                "no scoring + opponent clean-sheet tendency",
+                NO_GOAL_CONCEDED_SCORED_BONUS,
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "no_goals_scored", side)
+                ),
+                strongest_evidence(
+                    evidence_for_team(all_evidences, "no_goals_conceded", opponent)
+                ),
+            )
+
+    # --------------------------------------------------------
+    # First-half/result relationships.
+    # --------------------------------------------------------
+
+    if candidate.category == "first_half_winner" and side:
+        opponent = opposite_side(side)
+
+        add_pair_relationship(
+            matches,
+            "first-half winner + first to score",
+            FIRST_SCORE_FIRST_HALF_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_half_winner", side)
+            ),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_to_score", side)
+            ),
+        )
+
+        add_pair_relationship(
+            matches,
+            "first-half winner + opponent first to concede",
+            FIRST_HALF_RESULT_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_half_winner", side)
+            ),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_to_concede", opponent)
+            ),
+        )
+
+    if candidate.category == "first_to_score" and side:
+        opponent = opposite_side(side)
+
+        add_pair_relationship(
+            matches,
+            "first to score + first-half winner",
+            FIRST_SCORE_FIRST_HALF_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_to_score", side)
+            ),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_half_winner", side)
+            ),
+        )
+
+    # --------------------------------------------------------
+    # Result stability relationships.
+    # --------------------------------------------------------
+
+    if candidate.category == "wins" and side:
+        add_pair_relationship(
+            matches,
+            "win + no losses",
+            NO_LOSS_WIN_BONUS,
+            strongest_evidence(evidence_for_team(all_evidences, "wins", side)),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "no_losses", side)
+            ),
+        )
+
+    if candidate.category == "no_losses" and side:
+        add_pair_relationship(
+            matches,
+            "no losses + wins",
+            NO_LOSS_WIN_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "no_losses", side)
+            ),
+            strongest_evidence(evidence_for_team(all_evidences, "wins", side)),
+        )
+
+    if candidate.category == "losses" and side:
+        add_pair_relationship(
+            matches,
+            "losses + no wins",
+            NO_WIN_LOSS_BONUS,
+            strongest_evidence(evidence_for_team(all_evidences, "losses", side)),
+            strongest_evidence(evidence_for_team(all_evidences, "no_wins", side)),
+        )
+
+    if candidate.category == "no_wins" and side:
+        add_pair_relationship(
+            matches,
+            "no wins + losses",
+            NO_WIN_LOSS_BONUS,
+            strongest_evidence(evidence_for_team(all_evidences, "no_wins", side)),
+            strongest_evidence(evidence_for_team(all_evidences, "losses", side)),
+        )
+
+    # --------------------------------------------------------
+    # Scoring / clean-sheet relationships.
+    # --------------------------------------------------------
+
+    if candidate.category == "first_to_score" and side:
+        opponent = opposite_side(side)
+
+        add_pair_relationship(
+            matches,
+            "opponent no clean sheet supports scoring first",
+            NO_CLEAN_SHEET_SCORING_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_to_score", side)
+            ),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "no_clean_sheet", opponent)
+            ),
+        )
+
+    if candidate.category == "no_clean_sheet" and side:
+        opponent = opposite_side(side)
+
+        add_pair_relationship(
+            matches,
+            "opponent first to score supports no clean sheet",
+            NO_CLEAN_SHEET_SCORING_BONUS,
+            strongest_evidence(
+                evidence_for_team(all_evidences, "no_clean_sheet", side)
+            ),
+            strongest_evidence(
+                evidence_for_team(all_evidences, "first_to_score", opponent)
+            ),
+        )
+
+    # --------------------------------------------------------
+    # BTTS relationships.
+    # --------------------------------------------------------
+
+    if candidate.category == "btts":
+        home_no_clean = evidence_for_team(
+            all_evidences, "no_clean_sheet", "home"
+        )
+        away_no_clean = evidence_for_team(
+            all_evidences, "no_clean_sheet", "away"
+        )
+
+        for home_evidence, away_evidence in pair_combinations(
+            home_no_clean, away_no_clean
+        ):
+            matches.append(
+                RelationshipMatch(
+                    name="both teams no clean sheet → BTTS",
+                    weight=BOTH_NO_CLEAN_SHEET_BTTS_BONUS,
+                    evidences=(home_evidence, away_evidence),
+                )
+            )
+
+        home_first_score = evidence_for_team(
+            all_evidences, "first_to_score", "home"
+        )
+        away_first_score = evidence_for_team(
+            all_evidences, "first_to_score", "away"
+        )
+
+        for home_evidence, away_evidence in pair_combinations(
+            home_first_score, away_first_score
+        ):
+            matches.append(
+                RelationshipMatch(
+                    name="both teams first to score patterns → BTTS",
+                    weight=SCORING_PATTERN_BTTS_BONUS,
+                    evidences=(home_evidence, away_evidence),
+                )
+            )
+
+        home_score = evidence_for_team(
+            all_evidences, "first_to_score", "home"
+        )
+        away_score = evidence_for_team(
+            all_evidences, "first_to_score", "away"
+        )
+        home_concede = evidence_for_team(
+            all_evidences, "first_to_concede", "home"
+        )
+        away_concede = evidence_for_team(
+            all_evidences, "first_to_concede", "away"
+        )
+
+        for home_evidence, away_evidence, home_concede_evidence, away_concede_evidence in (
+            [
+                (a, b, c, d)
+                for a in home_score
+                for b in away_score
+                for c in home_concede
+                for d in away_concede
+            ]
+        ):
+            matches.append(
+                RelationshipMatch(
+                    name="both teams first-score + first-concede patterns → BTTS",
+                    weight=SCORING_PATTERN_BTTS_BONUS * 1.25,
+                    evidences=(
+                        home_evidence,
+                        away_evidence,
+                        home_concede_evidence,
+                        away_concede_evidence,
+                    ),
+                )
+            )
+
+    # --------------------------------------------------------
+    # Goal total relationships.
+    # --------------------------------------------------------
+
+    if candidate.category == "goals_ou":
+        threshold = candidate_threshold(candidate)
+
+        if threshold is not None and candidate.evidences[0].direction == "under":
+            home_clean = evidence_for_team(
+                all_evidences, "no_goals_conceded", "home"
+            )
+            away_clean = evidence_for_team(
+                all_evidences, "no_goals_conceded", "away"
+            )
+            home_no_score = evidence_for_team(
+                all_evidences, "no_goals_scored", "home"
+            )
+            away_no_score = evidence_for_team(
+                all_evidences, "no_goals_scored", "away"
+            )
+
+            threshold_factor = 1.0 if threshold <= 2.5 else 0.75 if threshold <= 3.5 else 0.50
+
+            for home_evidence, away_evidence in pair_combinations(
+                home_clean, away_clean
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="both teams clean-sheet tendencies → under goals",
+                        weight=BOTH_CLEAN_SHEET_UNDER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+            for home_evidence, away_evidence in pair_combinations(
+                home_no_score, away_no_score
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="both teams no scoring tendencies → under goals",
+                        weight=BOTH_NO_GOALS_SCORED_UNDER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+            for home_evidence, away_evidence in pair_combinations(
+                home_clean, away_no_score
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="home clean-sheet + away no-scoring tendencies → under goals",
+                        weight=CLEAN_SHEET_PLUS_NO_SCORING_UNDER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+            for home_evidence, away_evidence in pair_combinations(
+                away_clean, home_no_score
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="away clean-sheet + home no-scoring tendencies → under goals",
+                        weight=CLEAN_SHEET_PLUS_NO_SCORING_UNDER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+        elif threshold is not None and candidate.evidences[0].direction == "over":
+            home_no_clean = evidence_for_team(
+                all_evidences, "no_clean_sheet", "home"
+            )
+            away_no_clean = evidence_for_team(
+                all_evidences, "no_clean_sheet", "away"
+            )
+            home_first_score = evidence_for_team(
+                all_evidences, "first_to_score", "home"
+            )
+            away_first_score = evidence_for_team(
+                all_evidences, "first_to_score", "away"
+            )
+
+            if threshold <= 1.5:
+                threshold_factor = 1.0
+            elif threshold <= 2.5:
+                threshold_factor = 0.70
+            elif threshold <= 3.5:
+                threshold_factor = 0.40
+            else:
+                threshold_factor = 0.20
+
+            for home_evidence, away_evidence in pair_combinations(
+                home_no_clean, away_no_clean
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="both teams no-clean-sheet tendencies → over goals",
+                        weight=SCORING_PATTERN_OVER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+            for home_evidence, away_evidence in pair_combinations(
+                home_first_score, away_first_score
+            ):
+                matches.append(
+                    RelationshipMatch(
+                        name="both teams first-score tendencies → over goals",
+                        weight=SCORING_PATTERN_OVER_BONUS * threshold_factor,
+                        evidences=(home_evidence, away_evidence),
+                    )
+                )
+
+    # --------------------------------------------------------
+    # Cross-threshold consistency for goals/cards/corners.
+    # --------------------------------------------------------
+
+    if candidate.category.endswith("_ou"):
+        candidate_threshold_value = candidate_threshold(candidate)
+
+        if candidate_threshold_value is not None:
+            for evidence in all_evidences:
+                if evidence.category != candidate.category:
+                    continue
+                if evidence.direction != candidate.evidences[0].direction:
+                    continue
+                if evidence in candidate.evidences:
+                    continue
+
+                evidence_threshold = _evidence_threshold(evidence)
+                if evidence_threshold is None:
+                    continue
+
+                distance = abs(evidence_threshold - candidate_threshold_value)
+                if 0 < distance <= MAX_THRESHOLD_DISTANCE:
+                    strength_factor = 1.0 - (distance / MAX_THRESHOLD_DISTANCE) * 0.5
+                    matches.append(
+                        RelationshipMatch(
+                            name="same-direction nearby threshold confirmation",
+                            weight=THRESHOLD_CONSISTENCY_BONUS * strength_factor,
+                            evidences=(evidence,),
+                        )
+                    )
+
+    return [
+        match
+        for match in matches
+        if not all(evidence in candidate.evidences for evidence in match.evidences)
+    ]
+
+
+def _evidence_threshold(evidence: Evidence) -> float | None:
+    """Extract an O/U threshold from a single evidence market."""
+
+    if not evidence.category.endswith("_ou"):
+        return None
+
+    parts = evidence.market.split("_")
+
+    try:
+        return float(parts[2])
+    except (IndexError, ValueError):
+        return None
+
+
+def relationship_strength(match: RelationshipMatch) -> float:
+    """Calculate the strength of a relationship from its evidence."""
+
+    strengths = [weighted_confidence(evidence) for evidence in match.evidences]
+
+    if not strengths:
+        return 0.0
+
+    return min(strengths) * match.weight
+
+
+def relationship_group_key(match: RelationshipMatch) -> tuple:
+    """Group semantically duplicate relationship matches."""
+
+    participant_teams = tuple(
+        sorted(
+            {
+                evidence.team
+                for evidence in match.evidences
+                if evidence.team in {"home", "away"}
+            }
+        )
+    )
+
+    if len(match.evidences) == 1:
+        evidence = match.evidences[0]
+        return (
+            match.name,
+            participant_teams,
+            evidence.market,
+            evidence.category,
+            evidence.direction,
+        )
+
+    return (
+        match.name,
+        participant_teams,
+        tuple(
+            sorted(
+                {
+                    (
+                        evidence.market,
+                        evidence.category,
+                        evidence.direction,
+                    )
+                    for evidence in match.evidences
+                }
+            )
+        ),
+    )
+
+
+def deduplicate_relationship_matches(
+    matches: list[RelationshipMatch],
+) -> list[RelationshipMatch]:
+    """Keep the strongest match for each logical relationship."""
+
+    best: dict[tuple, tuple[float, RelationshipMatch]] = {}
+
+    for match in matches:
+        strength = relationship_strength(match)
+        key = relationship_group_key(match)
+
+        existing = best.get(key)
+        if existing is None or strength > existing[0]:
+            best[key] = (strength, match)
+
+    return [
+        item[1]
+        for item in sorted(
+            best.values(),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+    ]
+
+
+def supporting_evidence_bonus(
+    candidate: Candidate,
+    all_evidences: list[Evidence] | None = None,
+) -> float:
+    """Reward complementary evidence with diminishing returns and no hard cap."""
+
+    evidences = all_evidences if all_evidences is not None else candidate.evidences
+    matches = deduplicate_relationship_matches(
+        find_relationship_matches(candidate, evidences)
+    )
+
+    if not matches:
+        return 0.0
+
+    candidate.supporting_evidences.clear()
+    seen_supporting_keys: set[tuple] = set()
+
+    for match in matches:
+        for evidence in match.evidences:
+            if evidence in candidate.evidences:
                 continue
 
-            strength = min(
-                weighted_confidence(candidate_evidence),
-                weighted_confidence(other_evidence),
-            )
+            key = evidence_key(evidence)
+            if key in seen_supporting_keys:
+                continue
 
-            if {
-                candidate_evidence.category,
-                other_evidence.category,
-            } == {"first_to_score", "first_to_concede"}:
-                relationship = "first_to_score_concede"
-            else:
-                relationship = "first_half_result"
+            seen_supporting_keys.add(key)
+            candidate.supporting_evidences.append(evidence)
 
-            relationships[relationship] = max(
-                relationships.get(relationship, 0.0),
-                strength,
-            )
+    scored_matches = [
+        (relationship_strength(match), match)
+        for match in matches
+    ]
+    scored_matches.sort(key=lambda item: item[0], reverse=True)
 
-    bonus = 0.0
-    bonus += (
-        relationships.get("first_to_score_concede", 0.0) * FIRST_SCORE_CONCEDE_BONUS
-    )
-    bonus += relationships.get("first_half_result", 0.0) * FIRST_HALF_RESULT_BONUS
+    total_bonus = 0.0
+    for index, (base_bonus, match) in enumerate(scored_matches):
+        factor = RELATIONSHIP_DIMINISHING_FACTORS[
+            min(index, len(RELATIONSHIP_DIMINISHING_FACTORS) - 1)
+        ]
+        applied_bonus = base_bonus * factor
+        total_bonus += applied_bonus
 
-    return bonus
+        candidate.bonuses.append(
+            f"{match.name} (+{applied_bonus:.1f})"
+        )
+
+    return total_bonus
 
 
 def are_opposite_markets(
@@ -437,21 +1131,107 @@ def are_opposite_markets(
     return False
 
 
-# ============================================================
-# Conflict penalties
-# ============================================================
+def find_relationship_conflicts(
+    candidate: Candidate,
+    evidences: list[Evidence],
+) -> list[Evidence]:
+    """Find strong underlying-event contradictions not captured by market pairs."""
+
+    conflicts: list[Evidence] = []
+    side = candidate_side(candidate)
+
+    if candidate.category == "btts":
+        conflicts.extend(
+            evidence
+            for evidence in evidences
+            if evidence.category in {"no_goals_scored", "no_goals_conceded"}
+            and evidence.team in {"home", "away"}
+        )
+
+    if candidate.category == "first_to_score" and side:
+        opponent = opposite_side(side)
+
+        conflicts.extend(
+            evidence
+            for evidence in evidences
+            if (
+                (evidence.category == "no_goals_scored" and evidence.team == side)
+                or (
+                    evidence.category == "no_goals_conceded"
+                    and evidence.team == opponent
+                )
+            )
+        )
+
+    if candidate.category == "first_half_winner" and side:
+        opponent = opposite_side(side)
+
+        conflicts.extend(
+            evidence
+            for evidence in evidences
+            if (
+                evidence.category == "first_half_loser" and evidence.team == side
+            )
+            or (
+                evidence.category == "first_half_winner"
+                and evidence.team == opponent
+            )
+        )
+
+    if candidate.category == "goals_ou":
+        threshold = candidate_threshold(candidate)
+
+        home_no_clean = evidence_for_team(
+            evidences, "no_clean_sheet", "home"
+        )
+        away_no_clean = evidence_for_team(
+            evidences, "no_clean_sheet", "away"
+        )
+        home_clean = evidence_for_team(
+            evidences, "no_goals_conceded", "home"
+        )
+        away_clean = evidence_for_team(
+            evidences, "no_goals_conceded", "away"
+        )
+        home_no_score = evidence_for_team(
+            evidences, "no_goals_scored", "home"
+        )
+        away_no_score = evidence_for_team(
+            evidences, "no_goals_scored", "away"
+        )
+
+        if candidate.evidences[0].direction == "under" and threshold is not None:
+            if threshold <= 2.5 and home_no_clean and away_no_clean:
+                conflicts.extend(home_no_clean + away_no_clean)
+
+        if candidate.evidences[0].direction == "over" and threshold is not None:
+            if threshold >= 2.5:
+                conflicts.extend(home_clean + away_clean)
+                conflicts.extend(home_no_score + away_no_score)
+
+    unique: list[Evidence] = []
+    seen: set[int] = set()
+
+    for evidence in conflicts:
+        marker = id(evidence)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(evidence)
+
+    return unique
 
 
-def conflict_strengths(candidate: Candidate) -> list[tuple[float, Evidence]]:
+def conflict_strengths(candidate: Candidate) -> list[tuple[float, Evidence, str]]:
     """Calculate weighted strengths for contradictory evidence."""
 
-    conflicts: list[tuple[float, Evidence]] = []
+    conflicts: list[tuple[float, Evidence, str]] = []
     general = [e for e in candidate.evidences if e.section == "general"]
 
     for evidence in candidate.conflicting_evidences:
         strength = weighted_confidence(evidence)
-        weight = H2H_WEIGHT if evidence.section == "head2head" else GENERAL_WEIGHT
-        multiplier = 1.0
+        penalty_factor = CONFLICT_PENALTY
+        description = "direct conflict"
 
         if evidence.section == "head2head":
             has_home_support = any(
@@ -468,12 +1248,21 @@ def conflict_strengths(candidate: Candidate) -> list[tuple[float, Evidence]]:
             )
 
             if has_home_support and has_away_support:
-                multiplier = H2H_CONFLICT_MULTIPLIER
+                penalty_factor *= H2H_CONFLICT_MULTIPLIER
+
+        is_relationship_conflict = evidence in find_relationship_conflicts(
+            candidate, candidate.evidences + candidate.conflicting_evidences
+        )
+
+        if is_relationship_conflict and not are_opposite_markets(candidate.evidences[0], evidence):
+            penalty_factor = RELATIONSHIP_CONFLICT_PENALTY
+            description = "underlying-event conflict"
 
         conflicts.append(
             (
-                CONFLICT_PENALTY * strength * weight * multiplier,
+                penalty_factor * strength,
                 evidence,
+                description,
             )
         )
 
@@ -482,7 +1271,7 @@ def conflict_strengths(candidate: Candidate) -> list[tuple[float, Evidence]]:
 
 
 def conflicting_evidence_penalty(candidate: Candidate) -> float:
-    """Apply a capped, diminishing penalty for contradictory evidence."""
+    """Apply diminishing penalties for direct and underlying-event conflicts."""
 
     conflicts = conflict_strengths(candidate)
 
@@ -491,7 +1280,7 @@ def conflicting_evidence_penalty(candidate: Candidate) -> float:
 
     penalty = 0.0
 
-    for index, (base_penalty, evidence) in enumerate(conflicts):
+    for index, (base_penalty, evidence, description) in enumerate(conflicts):
         if index == 0:
             applied_penalty = base_penalty
         elif index == 1:
@@ -503,7 +1292,7 @@ def conflicting_evidence_penalty(candidate: Candidate) -> float:
 
         candidate.penalties.append(
             (
-                f"{evidence.section} conflict: "
+                f"{evidence.section} {description}: "
                 f"{evidence.name} "
                 f"{evidence.raw_value} "
                 f"({evidence.team}) "
@@ -514,54 +1303,57 @@ def conflicting_evidence_penalty(candidate: Candidate) -> float:
     return penalty
 
 
-# ============================================================
-# Scoring
-# ============================================================
+def calculate_base_confidence(evidences: list[Evidence]) -> float:
+    """Calculate the reported confidence percentage from direct evidence."""
+
+    if not evidences:
+        return 0.0
+
+    weighted_sum = sum(
+        evidence.confidence * confidence_weight(evidence)
+        for evidence in evidences
+    )
+    total_weight = sum(confidence_weight(evidence) for evidence in evidences)
+
+    if total_weight <= 0:
+        return 0.0
+
+    return max(0.0, min(1.0, weighted_sum / total_weight))
 
 
-def score_candidate(candidate: Candidate) -> None:
-    """Calculate the final score for a prediction candidate."""
+def score_candidate(
+    candidate: Candidate,
+    all_evidences: list[Evidence] | None = None,
+) -> None:
+    """Calculate the final uncapped score and confidence for a prediction."""
 
     candidate.score = 0.0
     candidate.bonuses.clear()
     candidate.penalties.clear()
 
-    evidences = candidate.evidences
-    general = [e for e in evidences if e.section == "general"]
-    h2h = [e for e in evidences if e.section == "head2head"]
+    evidences = all_evidences if all_evidences is not None else candidate.evidences
+    general = [e for e in candidate.evidences if e.section == "general"]
+    h2h = [e for e in candidate.evidences if e.section == "head2head"]
 
-    weighted_sum = 0.0
-    total_weight = 0.0
-
-    for evidence in evidences:
-        weight = H2H_WEIGHT if evidence.section == "head2head" else GENERAL_WEIGHT
-        strength = weighted_confidence(evidence)
-
-        weighted_sum += strength * weight
-        total_weight += weight
-
-    base_confidence = weighted_sum / total_weight if total_weight else 0.0
-    candidate.confidence = base_confidence
-    candidate.score = base_confidence * 70
+    candidate.score = sum(
+        weighted_confidence(evidence) * EVIDENCE_SCORE_MULTIPLIER
+        for evidence in candidate.evidences
+    )
+    candidate.confidence = calculate_base_confidence(candidate.evidences)
 
     if general and h2h:
-        general_conf = max(weighted_confidence(e) for e in general)
-        h2h_conf = max(weighted_confidence(e) for e in h2h)
-        agreement_strength = min(general_conf, h2h_conf)
+        general_strength = max(weighted_confidence(e) for e in general)
+        h2h_strength = max(weighted_confidence(e) for e in h2h)
+        agreement_strength = min(general_strength, h2h_strength)
         bonus = H2H_AGREEMENT_BONUS * agreement_strength
 
         candidate.score += bonus
-        candidate.bonuses.append(f"general + H2H agreement (+{bonus:.1f})")
+        candidate.bonuses.append(
+            f"general + H2H agreement (+{bonus:.1f})"
+        )
 
-    if general and not h2h:
-        strongest_general = max(weighted_confidence(e) for e in general)
-        penalty = MISSING_H2H_PENALTY * strongest_general
-
-        candidate.score -= penalty
-        candidate.penalties.append(f"no H2H confirmation (-{penalty:.1f})")
-
-    general_home = [e for e in general if e.team == "home"]
-    general_away = [e for e in general if e.team == "away"]
+    general_home = [e for e in candidate.evidences if e.section == "general" and e.team == "home"]
+    general_away = [e for e in candidate.evidences if e.section == "general" and e.team == "away"]
 
     if general_home and general_away:
         best_team_agreement = 0.0
@@ -583,31 +1375,22 @@ def score_candidate(candidate: Candidate) -> None:
         if best_team_agreement > 0:
             bonus = TEAM_AGREEMENT_BONUS * best_team_agreement
             candidate.score += bonus
-            candidate.bonuses.append(f"home + away agreement (+{bonus:.1f})")
+            candidate.bonuses.append(
+                f"home + away agreement (+{bonus:.1f})"
+            )
 
-    elif is_bilateral_market(candidate) and (general_home or general_away):
-        missing_team = "away" if general_home else "home"
-        candidate.score -= MISSING_GENERAL_TEAM_PENALTY
-        candidate.penalties.append(
-            f"missing {missing_team} general confirmation "
-            f"(-{MISSING_GENERAL_TEAM_PENALTY:.1f})"
-        )
-
-    relationship_bonus = supporting_evidence_bonus(candidate)
+    relationship_bonus = supporting_evidence_bonus(candidate, evidences)
 
     if relationship_bonus > 0:
         candidate.score += relationship_bonus
 
-        candidate.bonuses.append(f"complementary evidence (+{relationship_bonus:.1f})")
-
     candidate.score -= conflicting_evidence_penalty(candidate)
 
-    candidate.score = max(0.0, candidate.score)
 
+def prediction_value(candidate: Candidate) -> float:
+    """Combine uncapped score with confidence percentage."""
 
-# ============================================================
-# Human-readable market
-# ============================================================
+    return candidate.score * candidate.confidence
 
 
 def display_market(candidate: Candidate) -> str:
@@ -625,7 +1408,7 @@ def display_market(candidate: Candidate) -> str:
         return f"{operator} {threshold} {sport_type}"
 
     if category in TEAM_SPECIFIC_CATEGORIES:
-        side = candidate.market.split("_")[-1]
+        side = candidate.market.rsplit("_", 1)[-1]
         team_name = candidate.home if side == "home" else candidate.away
 
         readable = {
@@ -649,140 +1432,62 @@ def display_market(candidate: Candidate) -> str:
 
     return candidate.market
 
+class Analyzer:
+    """Reusable analyzer for extracting evidence and ranking predictions."""
 
-# ============================================================
-# Main analyzer
-# ============================================================
+    def __init__(self, data: dict[str, dict[str, Any]] | None = None):
+        self.data = data or {}
 
+    def analyze(
+        self,
+        data: dict[str, dict[str, Any]] | None = None,
+        top_n: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Analyze all matches and return the highest-ranked candidates."""
+        source = self.data if data is None else data
+        results = []
 
-def analyze(
-    data: dict[str, dict[str, Any]],
-    top_n: int = 10,
-) -> list[dict[str, Any]]:
-    """Analyze all matches and return the highest-ranked candidates."""
-
-    results = []
-
-    for match_name, match_data in data.items():
-        if " - " not in match_name:
-            continue
-
-        home, away = match_name.split(" - ", 1)
-        evidences = extract_evidence(match_data)
-        candidates = generate_candidates(home, away, evidences)
-
-        for candidate in candidates:
-            score_candidate(candidate)
-
-            results.append(
-                {
+        for match_name, match_data in source.items():
+            if " - " not in match_name:
+                continue
+            home, away = match_name.split(" - ", 1)
+            evidences = extract_evidence(match_data)
+            candidates = generate_candidates(home, away, evidences)
+            for candidate in candidates:
+                score_candidate(candidate, evidences)
+                results.append({
                     "home": candidate.home,
                     "away": candidate.away,
                     "market": display_market(candidate),
                     "score": round(candidate.score, 2),
                     "confidence": round(candidate.confidence * 100, 2),
+                    "prediction": round(prediction_value(candidate), 2),
                     "evidence": [
-                        {
-                            "section": evidence.section,
-                            "name": evidence.name,
-                            "value": evidence.raw_value,
-                            "team": evidence.team,
-                        }
-                        for evidence in candidate.evidences
+                        {"section": e.section, "name": e.name, "value": e.raw_value, "team": e.team}
+                        for e in candidate.evidences
                     ],
                     "supporting_evidence": [
-                        {
-                            "section": evidence.section,
-                            "name": evidence.name,
-                            "value": evidence.raw_value,
-                            "team": evidence.team,
-                        }
-                        for evidence in candidate.supporting_evidences
+                        {"section": e.section, "name": e.name, "value": e.raw_value, "team": e.team}
+                        for e in candidate.supporting_evidences
                     ],
                     "bonuses": candidate.bonuses,
                     "penalties": candidate.penalties,
-                }
-            )
+                })
 
-    results.sort(
-        key=lambda item: (
-            item["score"],
-            item["confidence"],
-        ),
-        reverse=True,
-    )
-
-    for rank, prediction in enumerate(results[:top_n], start=1):
-        prediction["rank"] = rank
-
-    return results[:top_n]
-
-
-def group_predictions_by_game(
-    predictions: list[dict],
-) -> dict[str, list[dict]]:
-    """Group ranked predictions by match while preserving global order."""
-
-    grouped = OrderedDict()
-
-    for prediction in predictions:
-        game = f"{prediction['home']} - {prediction['away']}"
-        grouped.setdefault(game, []).append(prediction)
-
-    return dict(
-        sorted(
-            grouped.items(),
-            key=lambda item: item[1][0]["score"],
+        results.sort(
+            key=lambda item: (item["prediction"], item["score"], item["confidence"]),
             reverse=True,
         )
-    )
+        for rank, prediction in enumerate(results[:top_n], start=1):
+            prediction["rank"] = rank
+        return results[:top_n]
 
+    @staticmethod
+    def group_predictions_by_game(predictions: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Group ranked predictions by match while preserving prediction order."""
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for prediction in predictions:
+            game = f"{prediction['home']} - {prediction['away']}"
+            grouped.setdefault(game, []).append(prediction)
+        return dict(sorted(grouped.items(), key=lambda item: item[1][0]["prediction"], reverse=True))
 
-# ============================================================
-# Command-line entry point
-# ============================================================
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Analyze team streaks data.")
-    parser.add_argument(
-        "file_path",
-        nargs="?",
-        help="Path to the team streaks JSON file.",
-    )
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-
-    input_path = Path(args.file_path)
-    LOGGER.info("Reading input file: %s", input_path)
-
-    try:
-        with input_path.open("r", encoding="utf-8") as streaks_file:
-            data = json.load(streaks_file)
-    except (OSError, json.JSONDecodeError):
-        LOGGER.exception("Could not read or parse input file: %s", input_path)
-        raise
-
-    LOGGER.info("Loaded %d matches", len(data))
-
-    predictions = analyze(data, top_n=20)
-    LOGGER.info("Generated %d predictions", len(predictions))
-    grouped_predictions = group_predictions_by_game(predictions)
-
-    date_match = re.search(r"(\d{8})(?=\.json$)", input_path.name)
-    output_date = (
-        date_match.group(1) if date_match else datetime.now().strftime("%Y%m%d")
-    )
-
-    analysis_history = Path("analysis_history")
-    analysis_history.mkdir(parents=True, exist_ok=True)
-    output_path = analysis_history / f"analysis_{output_date}.json"
-    output_path.write_text(
-        json.dumps(grouped_predictions, indent=4),
-        encoding="utf-8",
-    )
-    LOGGER.info("Analysis written to %s", output_path)

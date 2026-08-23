@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "game-analyst"
+version = "0.1.0"
+description = "Football match analysis pipeline using Sofascore data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright",
+    "sofascore-wrapper",
+]
+
+[project.scripts]
+game-analyst = "game_analyst.pipeline:main"
+
+[tool.setuptools]
+packages = ["game_analyst"]
+
+[tool.setuptools.package-dir]
+game_analyst = "."
