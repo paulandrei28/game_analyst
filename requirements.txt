@@ -1,0 +1,2 @@
+playwright
+sofascore-wrapper
