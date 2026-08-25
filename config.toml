@@ -1,0 +1,102 @@
+# Game Analyst configuration
+
+[pipeline]
+date = "today"
+# Paths are relative to this file unless absolute.
+output_dir = "."
+
+[analysis]
+top_n = 20
+# Optional: uncomment to exclude predictions below this computed value.
+# prediction_threshold = 100.0
+
+[fixtures]
+# Add a league as one `name = api_id` line. Comment out a line to disable it.
+api_timeout_seconds = 10.0
+
+[fixtures.leagues]
+
+# ==========================================
+# INTERNATIONAL & CONTINENTAL COMPETITIONS
+# ==========================================
+# UEFA (Europe)
+uefa-champions-league = 2
+uefa-europa-league = 3
+uefa-conference-league = 848
+uefa-super-cup = 531
+# uefa-nations-league = 5
+# uefa-euro = 4
+# uefa-euro-qualifiers = 960
+
+# FIFA / CONMEBOL / Other International
+# fifa-world-cup = 1
+# fifa-club-world-cup = 15
+# copa-libertadores = 13
+# copa-sudamericana = 11
+
+# ==========================================
+# DOMESTIC COMPETITIONS (BY COUNTRY)
+# ==========================================
+
+# Romania
+superliga = 283
+# cupa-romaniei = 286
+
+# England
+premier-league = 39
+fa-cup = 45
+# championship = 40
+efl-cup = 48
+
+# Spain
+laliga = 140
+copa-del-rey = 143
+# laliga-hypermotion = 141
+# supercopa-de-espana = 556
+
+# Italy
+serie-a = 135
+coppa-italia = 137
+# serie-b = 136
+# supercoppa-italiana = 547
+
+# Germany
+bundesliga = 78
+dfb-pokal = 81
+# 2-bundesliga = 79
+# dfl-supercup = 529
+
+# France
+ligue-1 = 61
+coupe-de-france = 66
+# ligue-2 = 62
+# trophee-des-champions = 526
+
+# Netherlands
+eredivisie = 88
+# knvb-beker = 90
+
+# Portugal
+primeira-liga = 94
+taca-de-portugal = 96
+# taca-da-liga = 97
+
+# Belgium
+pro-league = 144
+# belgian-cup = 147
+
+# Turkey
+super-lig = 203
+# turkiye-kupasi = 206
+
+# Scotland
+premiership = 179
+# scottish-cup = 180
+
+# Americas (Popular Additions)
+# major-league-soccer = 253
+# brasil-serie-a = 71
+# argentina-liga-profesional = 128
+
+[sofascore]
+request_interval_seconds = 1.0

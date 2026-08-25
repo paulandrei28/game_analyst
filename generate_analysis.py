@@ -22,9 +22,14 @@ class AnalysisGenerator:
         self,
         data: dict[str, dict[str, Any]],
         top_n: int = 20,
+        prediction_threshold: float | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
         """Run the analyzer and return flat and grouped results."""
-        predictions = self.analyzer.analyze(data, top_n=top_n)
+        predictions = self.analyzer.analyze(
+            data,
+            top_n=top_n,
+            prediction_threshold=prediction_threshold,
+        )
         grouped = self.analyzer.group_predictions_by_game(predictions)
         return predictions, grouped
 
@@ -32,6 +37,7 @@ class AnalysisGenerator:
         self,
         input_path: str | Path,
         top_n: int = 20,
+        prediction_threshold: float | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
         """Load a team-streak JSON file and analyze it."""
         path = Path(input_path)
@@ -45,7 +51,11 @@ class AnalysisGenerator:
             raise
 
         LOGGER.info("Loaded %d matches", len(data))
-        predictions, grouped = self.generate(data, top_n=top_n)
+        predictions, grouped = self.generate(
+            data,
+            top_n=top_n,
+            prediction_threshold=prediction_threshold,
+        )
         LOGGER.info("Generated %d predictions", len(predictions))
         return predictions, grouped
 

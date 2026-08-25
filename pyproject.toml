@@ -9,8 +9,9 @@ description = "Football match analysis pipeline using Sofascore data"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "playwright",
+    "requests",
     "sofascore-wrapper",
+    "tomli; python_version < '3.11'",
 ]
 
 [project.scripts]

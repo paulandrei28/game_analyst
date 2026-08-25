@@ -1437,14 +1437,20 @@ class Analyzer:
 
     def __init__(self, data: dict[str, dict[str, Any]] | None = None):
         self.data = data or {}
+        self.threshold_excluded_count = 0
 
     def analyze(
         self,
         data: dict[str, dict[str, Any]] | None = None,
         top_n: int = 10,
+        prediction_threshold: float | None = None,
     ) -> list[dict[str, Any]]:
         """Analyze all matches and return the highest-ranked candidates."""
+        if prediction_threshold is not None and prediction_threshold < 0:
+            raise ValueError("prediction_threshold must be non-negative")
+
         source = self.data if data is None else data
+        self.threshold_excluded_count = 0
         results = []
 
         for match_name, match_data in source.items():
@@ -1478,6 +1484,13 @@ class Analyzer:
             key=lambda item: (item["prediction"], item["score"], item["confidence"]),
             reverse=True,
         )
+        if prediction_threshold is not None:
+            eligible_results = [
+                item for item in results
+                if item["prediction"] >= prediction_threshold
+            ]
+            self.threshold_excluded_count = len(results) - len(eligible_results)
+            results = eligible_results
         for rank, prediction in enumerate(results[:top_n], start=1):
             prediction["rank"] = rank
         return results[:top_n]

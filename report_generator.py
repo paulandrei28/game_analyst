@@ -17,9 +17,11 @@ class HumanReadableReport:
         predictions: list[dict[str, Any]],
         *,
         title: str = "Match Analysis Report",
+        threshold_notice: str | None = None,
     ) -> str:
         if not predictions:
-            return f"# {title}\n\nNo predictions were generated.\n"
+            message = threshold_notice or "No predictions were generated."
+            return f"# {title}\n\n{message}\n"
 
         groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for prediction in predictions:
@@ -36,6 +38,8 @@ class HumanReadableReport:
             "| Rank | Match | Prediction | Details |",
             "| ---: | --- | --- | --- |",
         ]
+        if threshold_notice:
+            lines[3:3] = [threshold_notice, ""]
         lines.extend(self._render_summary_row(prediction) for prediction in predictions)
         lines.extend(["", "## Evidence", ""])
 
@@ -185,8 +189,13 @@ class HumanReadableReport:
         output_path: str,
         *,
         title: str = "Match Analysis Report",
+        threshold_notice: str | None = None,
     ) -> str:
-        report = self.render(predictions, title=title)
+        report = self.render(
+            predictions,
+            title=title,
+            threshold_notice=threshold_notice,
+        )
         with open(output_path, "w", encoding="utf-8") as report_file:
             report_file.write(report)
         return output_path

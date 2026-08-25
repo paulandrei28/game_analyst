@@ -4,12 +4,12 @@ import argparse
 import asyncio
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 
+from .config import AppConfig, DEFAULT_CONFIG_PATH, load_config
 from .generate_analysis import AnalysisGenerator
 from .report_generator import HumanReadableReport
-from .sofascore_upcoming_scraper import SofascoreUpcomingScraper
+from .fixtures_scraper import DATE_OPTIONS, load_or_fetch_fixtures, resolve_date
 from .team_streaks import fetch_team_streaks
 
 LOGGER = logging.getLogger(__name__)
@@ -17,14 +17,24 @@ LOGGER = logging.getLogger(__name__)
 
 async def run_pipeline(
     *,
-    headless: bool = True,
-    top_n: int = 20,
-    output_dir: str | Path = Path(__file__).resolve().parent,
+    date_option: str | None = None,
+    top_n: int | None = None,
+    output_dir: str | Path | None = None,
+    prediction_threshold: float | None = None,
+    config: AppConfig | None = None,
 ) -> dict[str, Path]:
     """Scrape, enrich, analyze, and save the daily match artifacts."""
+    settings = config or load_config()
+    date_option = settings.date if date_option is None else date_option
+    top_n = settings.top_n if top_n is None else top_n
+    output_dir = settings.output_dir if output_dir is None else output_dir
+    if prediction_threshold is None:
+        prediction_threshold = settings.prediction_threshold
+
     if top_n < 1:
         raise ValueError("top_n must be at least 1")
 
+    target_date = resolve_date(date_option)
     output_root = Path(output_dir)
     streaks_dir = output_root / "team_streaks"
     json_analysis_dir = output_root / "analysis"
@@ -33,36 +43,54 @@ async def run_pipeline(
     json_analysis_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    output_date = datetime.now().strftime("%Y%m%d")
+    output_date = target_date.strftime("%Y%m%d")
     streaks_path = streaks_dir / f"team_streaks_{output_date}.json"
     analysis_path = json_analysis_dir / f"analysis_{output_date}.json"
     report_path = report_dir / f"report_{output_date}.md"
 
     streaks = _load_cached_streaks(streaks_path)
     if streaks is None:
-        LOGGER.info("No valid team streak cache for today; collecting fresh data")
-        scraper = SofascoreUpcomingScraper(headless=headless)
-        games = await scraper.get_upcoming_games()
+        LOGGER.info("No valid team streak cache for %s; collecting fresh data", date_option)
+        games, _ = load_or_fetch_fixtures(
+            date_option,
+            output_dir=output_root,
+            allowed_league_ids=settings.allowed_league_ids,
+            api_timeout_seconds=settings.api_timeout_seconds,
+        )
         LOGGER.info("Scraper returned %d games", len(games))
 
         LOGGER.info("Fetching team streaks")
-        streaks = await fetch_team_streaks(games)
+        streaks = await fetch_team_streaks(
+            games,
+            request_interval=settings.sofascore_request_interval_seconds,
+        )
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
 
     generator = AnalysisGenerator()
-    predictions, grouped_predictions = generator.generate(streaks, top_n=top_n)
+    predictions, grouped_predictions = generator.generate(
+        streaks,
+        top_n=top_n,
+        prediction_threshold=prediction_threshold,
+    )
     generator.save_json(grouped_predictions, analysis_path)
 
     report_generator = HumanReadableReport()
+    threshold_notice = None
+    excluded_count = getattr(generator.analyzer, "threshold_excluded_count", 0)
+    if prediction_threshold is not None and isinstance(excluded_count, int) and excluded_count:
+        threshold_notice = (
+            f"Prediction threshold {prediction_threshold:.2f} excluded "
+            f"{excluded_count} prediction(s); only {len(predictions)} met the threshold."
+        )
     report_generator.save(
         predictions,
         str(report_path),
         title=f"Match Analysis Report - {output_date}",
+        threshold_notice=threshold_notice,
     )
-    LOGGER.info("Report written to %s", report_path)
 
     return {
         "streaks": streaks_path,
@@ -100,21 +128,18 @@ def parse_args() -> argparse.Namespace:
         prog="game_analyst",
         description="Scrape upcoming football matches and generate analysis.",
     )
-    parser.add_argument(
-        "--headed",
-        action="store_true",
-        help="Show the browser while scraping Sofascore.",
-    )
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--date", choices=DATE_OPTIONS)
     parser.add_argument(
         "--top-n",
         type=int,
-        default=20,
+        default=None,
         help="Number of predictions to retain (default: 20).",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parent,
+        default=None,
         help="Root directory for generated history files (default: project directory).",
     )
     return parser.parse_args()
@@ -122,6 +147,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    settings = load_config(args.config)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -129,9 +155,11 @@ def main() -> None:
     try:
         artifacts = asyncio.run(
             run_pipeline(
-                headless=not args.headed,
-                top_n=args.top_n,
-                output_dir=args.output_dir,
+                date_option=args.date or settings.date,
+                top_n=settings.top_n if args.top_n is None else args.top_n,
+                output_dir=settings.output_dir if args.output_dir is None else args.output_dir,
+                prediction_threshold=settings.prediction_threshold,
+                config=settings,
             )
         )
     except Exception:

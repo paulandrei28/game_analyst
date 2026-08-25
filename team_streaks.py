@@ -8,11 +8,10 @@ from sofascore_wrapper.match import Match
 LOGGER = logging.getLogger(__name__)
 
 
-async def fetch_team_streaks(games):
+async def fetch_team_streaks(games, *, request_interval: float = 5.0):
     """Return ``{game: team_streaks}`` for scraped upcoming games."""
     api = SofascoreAPI()
     results = {}
-    request_interval = 5
     last_request = 0.0
     processed_games = 0
 
