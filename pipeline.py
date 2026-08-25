@@ -26,15 +26,17 @@ async def run_pipeline(
         raise ValueError("top_n must be at least 1")
 
     output_root = Path(output_dir)
-    streaks_dir = output_root / "team_streaks_history"
-    analysis_dir = output_root / "analysis_history"
+    streaks_dir = output_root / "team_streaks"
+    json_analysis_dir = output_root / "analysis"
+    report_dir = output_root / "report"
     streaks_dir.mkdir(parents=True, exist_ok=True)
-    analysis_dir.mkdir(parents=True, exist_ok=True)
+    json_analysis_dir.mkdir(parents=True, exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
     output_date = datetime.now().strftime("%Y%m%d")
     streaks_path = streaks_dir / f"team_streaks_{output_date}.json"
-    analysis_path = analysis_dir / f"analysis_{output_date}.json"
-    report_path = analysis_dir / f"analysis_{output_date}.md"
+    analysis_path = json_analysis_dir / f"analysis_{output_date}.json"
+    report_path = report_dir / f"report_{output_date}.md"
 
     streaks = _load_cached_streaks(streaks_path)
     if streaks is None:
