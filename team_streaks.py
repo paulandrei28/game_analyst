@@ -82,7 +82,7 @@ async def fetch_team_streaks(games, *, request_interval: float = 5.0):
             streaks = await match_init.team_streaks()
             last_request = asyncio.get_running_loop().time()
             results[f"{home_team} - {away_team}"] = streaks
-            LOGGER.info("Retrieved streaks for game %d", processed_games)
+            LOGGER.info("Retrieved streaks for game %s - %s", home_team, away_team)
 
         LOGGER.info("Retrieved streaks for %d of %d games", len(results), len(games))
         return results
