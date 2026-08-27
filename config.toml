@@ -7,8 +7,10 @@ output_dir = "output"
 
 [analysis]
 top_n = 20
+
 # Optional: uncomment to exclude predictions below this computed value.
 # prediction_threshold = 100.0
+
 # Market categories included in the final ranking. Comment out any category
 # that is not needed. O/U entries include every available threshold.
 enabled_markets = [

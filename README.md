@@ -48,6 +48,16 @@ pip install -e .
 
 Set `API_FOOTBALL_API_KEY` before fetching fixtures. The API-Football free plan limits fixture queries to `yesterday`, `today`, or `tomorrow`.
 
+## GitHub Actions
+
+The workflow in `.github/workflows/daily-report.yml` generates the daily report
+automatically at 06:00 UTC and uploads only the Markdown report as a workflow
+artifact. It can also be started manually from the **Actions** tab.
+
+Add `API_FOOTBALL_API_KEY` as a repository secret under **Settings > Secrets
+and variables > Actions** before running the workflow. Reports are retained for
+30 days and can be downloaded from the workflow run's **Artifacts** section.
+
 ## Run
 
 From the directory containing the `game_analyst` folder:
