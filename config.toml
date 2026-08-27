@@ -120,4 +120,4 @@ brasil-serie-a = 71
 argentina-liga-profesional = 128
 
 [sofascore]
-request_interval_seconds = 1.0
+request_interval_seconds = 2.0

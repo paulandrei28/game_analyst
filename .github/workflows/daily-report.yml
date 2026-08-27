@@ -24,13 +24,15 @@ jobs:
       - name: Install project
         run: python -m pip install --no-cache-dir .
 
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
       - name: Generate report
         env:
           API_FOOTBALL_API_KEY: ${{ secrets.API_FOOTBALL_API_KEY }}
         run: game-analyst --config config.toml
 
       - name: Upload Markdown report
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: daily-report-${{ github.run_id }}

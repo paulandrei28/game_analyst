@@ -89,5 +89,3 @@ async def fetch_team_streaks(games, *, request_interval: float = 5.0):
 
     finally:
         await api.close()
-
-
