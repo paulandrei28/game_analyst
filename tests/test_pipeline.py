@@ -76,7 +76,7 @@ class PipelineTests(unittest.TestCase):
             generator_class.return_value.generate.return_value = ([], {})
             asyncio.run(pipeline.run_pipeline())
 
-        generator_class.assert_called_once_with()
+        generator_class.assert_called_once_with(enabled_markets=config.enabled_markets)
 
 
 if __name__ == "__main__":

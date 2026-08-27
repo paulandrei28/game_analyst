@@ -56,6 +56,25 @@ class AnalyzerHelpersTests(unittest.TestCase):
         self.assertEqual(evidence[0].market, "wins_home")
         self.assertEqual(evidence[0].sample_size, 4)
 
+    def test_analyze_filters_to_enabled_market_categories(self):
+        analyzer = Analyzer(
+            {
+                "Home FC - Away FC": {
+                    "general": [
+                        {"name": "Wins", "team": "home", "value": "5"},
+                        {"name": "Both teams scoring", "team": None, "value": "4/5"},
+                    ],
+                    "head2head": [],
+                }
+            },
+            enabled_markets=("btts",),
+        )
+
+        predictions = analyzer.analyze(top_n=10)
+
+        self.assertEqual(len(predictions), 1)
+        self.assertEqual(predictions[0]["market"], "both teams scoring")
+
     def test_score_candidate_combines_evidence_and_prediction_value(self):
         evidence = Evidence(
             market="wins_home",

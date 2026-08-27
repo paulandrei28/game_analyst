@@ -9,6 +9,25 @@ output_dir = "output"
 top_n = 20
 # Optional: uncomment to exclude predictions below this computed value.
 # prediction_threshold = 100.0
+# Market categories included in the final ranking. Comment out any category
+# that is not needed. O/U entries include every available threshold.
+enabled_markets = [
+	"goals_ou",
+	"corners_ou",
+	"cards_ou",
+	"btts",
+	"first_to_score",
+	"first_to_concede",
+	"first_half_winner",
+	"first_half_loser",
+	"no_losses",
+	"wins",
+	"losses",
+	"no_wins",
+	"no_goals_conceded",
+	"no_goals_scored",
+	"no_clean_sheet",
+]
 
 [fixtures]
 # Add a league as one `name = api_id` line. Comment out a line to disable it.
@@ -24,15 +43,15 @@ uefa-champions-league = 2
 uefa-europa-league = 3
 uefa-conference-league = 848
 uefa-super-cup = 531
-# uefa-nations-league = 5
-# uefa-euro = 4
-# uefa-euro-qualifiers = 960
+uefa-nations-league = 5
+uefa-euro = 4
+uefa-euro-qualifiers = 960
 
 # FIFA / CONMEBOL / Other International
-# fifa-world-cup = 1
-# fifa-club-world-cup = 15
-# copa-libertadores = 13
-# copa-sudamericana = 11
+fifa-world-cup = 1
+fifa-club-world-cup = 15
+copa-libertadores = 13
+copa-sudamericana = 11
 
 # ==========================================
 # DOMESTIC COMPETITIONS (BY COUNTRY)
@@ -94,9 +113,9 @@ premiership = 179
 # scottish-cup = 180
 
 # Americas (Popular Additions)
-# major-league-soccer = 253
-# brasil-serie-a = 71
-# argentina-liga-profesional = 128
+major-league-soccer = 253
+brasil-serie-a = 71
+argentina-liga-profesional = 128
 
 [sofascore]
 request_interval_seconds = 1.0

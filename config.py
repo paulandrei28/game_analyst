@@ -12,6 +12,23 @@ except ModuleNotFoundError:  # pragma: no cover - only used on Python 3.10
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "output"
+SUPPORTED_MARKETS = (
+    "goals_ou",
+    "corners_ou",
+    "cards_ou",
+    "btts",
+    "first_to_score",
+    "first_to_concede",
+    "first_half_winner",
+    "first_half_loser",
+    "no_losses",
+    "wins",
+    "losses",
+    "no_wins",
+    "no_goals_conceded",
+    "no_goals_scored",
+    "no_clean_sheet",
+)
 
 
 @dataclass(frozen=True)
@@ -19,6 +36,7 @@ class AppConfig:
     date: str = "today"
     top_n: int = 20
     prediction_threshold: float | None = None
+    enabled_markets: tuple[str, ...] = SUPPORTED_MARKETS
     output_dir: Path = DEFAULT_OUTPUT_DIR
     league_ids: dict[str, int] | None = None
     enabled_leagues: tuple[str, ...] = ()
@@ -65,6 +83,14 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     if prediction_threshold is not None and prediction_threshold < 0:
         raise ValueError("analysis.prediction_threshold must be non-negative")
 
+    configured_markets = analysis.get("enabled_markets", SUPPORTED_MARKETS)
+    enabled_markets = tuple(str(market) for market in configured_markets)
+    unknown_markets = sorted(set(enabled_markets) - set(SUPPORTED_MARKETS))
+    if unknown_markets:
+        raise ValueError(
+            f"Unknown market names in config: {', '.join(unknown_markets)}"
+        )
+
     output_dir = Path(pipeline.get("output_dir", "output"))
     if not output_dir.is_absolute():
         output_dir = config_path.parent / output_dir
@@ -78,6 +104,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         date=str(pipeline.get("date", "today")),
         top_n=top_n,
         prediction_threshold=prediction_threshold,
+        enabled_markets=enabled_markets,
         output_dir=output_dir,
         league_ids=league_ids,
         enabled_leagues=enabled_leagues,

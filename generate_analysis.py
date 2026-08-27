@@ -15,8 +15,12 @@ LOGGER = logging.getLogger(__name__)
 class AnalysisGenerator:
     """Application-level pipeline for loading, analyzing and saving results."""
 
-    def __init__(self, analyzer: Analyzer | None = None):
-        self.analyzer = analyzer or Analyzer()
+    def __init__(
+        self,
+        analyzer: Analyzer | None = None,
+        enabled_markets: tuple[str, ...] | None = None,
+    ):
+        self.analyzer = analyzer or Analyzer(enabled_markets=enabled_markets)
 
     def generate(
         self,

@@ -69,7 +69,7 @@ async def run_pipeline(
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
 
-    generator = AnalysisGenerator()
+    generator = AnalysisGenerator(enabled_markets=settings.enabled_markets)
     predictions, grouped_predictions = generator.generate(
         streaks,
         top_n=top_n,

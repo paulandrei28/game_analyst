@@ -421,6 +421,7 @@ def generate_candidates(
     home: str,
     away: str,
     evidences: list[Evidence],
+    enabled_markets: set[str] | frozenset[str] | None = None,
 ) -> list[Candidate]:
     """Create one candidate for each supported market direction."""
 
@@ -431,6 +432,8 @@ def generate_candidates(
         markets.setdefault(evidence.market, []).append(evidence)
 
     for market, supporting in markets.items():
+        if enabled_markets is not None and supporting[0].category not in enabled_markets:
+            continue
         candidate = Candidate(
             home=home,
             away=away,
@@ -1435,8 +1438,13 @@ def display_market(candidate: Candidate) -> str:
 class Analyzer:
     """Reusable analyzer for extracting evidence and ranking predictions."""
 
-    def __init__(self, data: dict[str, dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        data: dict[str, dict[str, Any]] | None = None,
+        enabled_markets: tuple[str, ...] | set[str] | None = None,
+    ):
         self.data = data or {}
+        self.enabled_markets = None if enabled_markets is None else set(enabled_markets)
         self.threshold_excluded_count = 0
 
     def analyze(
@@ -1458,7 +1466,12 @@ class Analyzer:
                 continue
             home, away = match_name.split(" - ", 1)
             evidences = extract_evidence(match_data)
-            candidates = generate_candidates(home, away, evidences)
+            candidates = generate_candidates(
+                home,
+                away,
+                evidences,
+                enabled_markets=self.enabled_markets,
+            )
             for candidate in candidates:
                 score_candidate(candidate, evidences)
                 results.append({

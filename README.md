@@ -84,6 +84,14 @@ output_dir = "output"
 [analysis]
 top_n = 20
 # prediction_threshold = 100.0
+enabled_markets = [
+	"goals_ou", "corners_ou", "cards_ou",
+	"btts",
+	"first_to_score", "first_to_concede",
+	"first_half_winner", "first_half_loser",
+	"no_losses", "wins", "losses", "no_wins",
+	"no_goals_conceded", "no_goals_scored", "no_clean_sheet",
+]
 
 [fixtures]
 api_timeout_seconds = 10.0
@@ -99,6 +107,11 @@ request_interval_seconds = 5.0
 `prediction_threshold` is optional. When enabled, predictions with a computed
 prediction value below it are excluded before `top_n` is applied. The report
 will say how many predictions were excluded when that reduces the result set.
+`enabled_markets` controls which supported market categories can appear in the
+final ranking. Comment out entries in the TOML array to disable them. The three
+`*_ou` categories include all available over/under thresholds for goals, corners,
+and cards. If `enabled_markets` is omitted, all supported categories remain
+enabled.
 Pass another file with `--config PATH` when maintaining multiple configurations.
 
 For example:

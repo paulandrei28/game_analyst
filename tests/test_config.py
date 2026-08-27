@@ -18,6 +18,7 @@ output_dir = "artifacts"
 [analysis]
 top_n = 7
 prediction_threshold = 120.5
+enabled_markets = ["goals_ou", "btts", "wins"]
 
 [fixtures]
 api_timeout_seconds = 12
@@ -37,6 +38,7 @@ request_interval_seconds = 1.5
         self.assertEqual(config.date, "tomorrow")
         self.assertEqual(config.top_n, 7)
         self.assertEqual(config.prediction_threshold, 120.5)
+        self.assertEqual(config.enabled_markets, ("goals_ou", "btts", "wins"))
         self.assertEqual(config.enabled_leagues, ("premier-league", "laliga"))
         self.assertEqual(config.league_ids, {"premier-league": 39, "laliga": 140})
         self.assertEqual(config.allowed_league_ids, {39, 140})
@@ -59,6 +61,13 @@ request_interval_seconds = 1.5
 
             path.write_text('[analysis]\nprediction_threshold = -1\n', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "non-negative"):
+                load_config(path)
+
+            path.write_text(
+                '[analysis]\nenabled_markets = ["goals_ou", "made-up"]\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "Unknown market"):
                 load_config(path)
 
     def test_missing_config_returns_defaults(self):
