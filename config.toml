@@ -3,7 +3,7 @@
 [pipeline]
 date = "today"
 # Paths are relative to this file unless absolute.
-output_dir = "."
+output_dir = "output"
 
 [analysis]
 top_n = 20

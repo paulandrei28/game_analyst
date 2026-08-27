@@ -13,6 +13,7 @@ LOGGER = logging.getLogger(__name__)
 DATE_OPTIONS = ("yesterday", "today", "tomorrow")
 
 BASE_URL = "https://v3.football.api-sports.io/fixtures"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 def resolve_date(date_option: str, *, today: date | None = None) -> date:
     """Resolve one of the API's supported relative date options."""
     if date_option not in DATE_OPTIONS:
@@ -97,7 +98,7 @@ def cache_path(output_dir: str | Path, target_date: date) -> Path:
 def load_or_fetch_fixtures(
     date_option: str = "today",
     *,
-    output_dir: str | Path = Path(__file__).resolve().parent,
+    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     api_key: str | None = None,
     allowed_league_ids: set[int] | None = None,
     api_timeout_seconds: float = 10.0,
@@ -130,7 +131,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parent,
+        default=DEFAULT_OUTPUT_DIR,
         help="Root directory containing the fixtures cache.",
     )
     args = parser.parse_args()

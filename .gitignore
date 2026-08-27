@@ -50,7 +50,4 @@ ENV.venv/
 Thumbs.db
 
 # Generated analysis history
-analysis/
-team_streaks/
-report/
-fixtures/
+output/

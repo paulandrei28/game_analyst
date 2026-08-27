@@ -6,8 +6,8 @@ A small football match-analysis pipeline built around API-Football and Sofascore
 
 `game_analyst` is the application package and `pipeline.py` contains its workflow:
 
-1. Look for the selected date's team-streak cache in `team_streaks/`.
-2. If the cache is missing or invalid, load the selected date's fixtures from `fixtures/` or API-Football.
+1. Look for the selected date's team-streak cache in `output/team_streaks/`.
+2. If the cache is missing or invalid, load the selected date's fixtures from `output/fixtures/` or API-Football.
 3. Fetch each match's team streaks through `sofascore_wrapper` and save them as JSON.
 4. Analyze the streak data with the scoring logic in `analyzer.py`.
 5. Save grouped predictions as JSON and render a Markdown report.
@@ -22,9 +22,9 @@ When the selected date's streak file already exists and contains valid JSON, ste
 - `analyzer.py` - evidence extraction, candidate scoring, relationships, and ranking.
 - `generate_analysis.py` - application wrapper for analysis and JSON persistence.
 - `report_generator.py` - Markdown report rendering and persistence.
-- `fixtures/` - cached newline-separated fixture lists.
-- `team_streaks/` - cached daily streak input files.
-- `analysis/` and `report/` - generated prediction JSON and Markdown reports.
+- `output/fixtures/` - cached newline-separated fixture lists.
+- `output/team_streaks/` - cached daily streak input files.
+- `output/analysis/` and `output/report/` - generated prediction JSON and Markdown reports.
 
 The history directories are generated data and are ignored by Git.
 
@@ -57,8 +57,8 @@ python -m game_analyst
 ```
 
 The module entry point keeps imports and generated output paths consistent. It
-stores the default history files inside the project directory, regardless of
-the directory from which the command is launched.
+stores the default history files inside the project's `output/` directory,
+regardless of the directory from which the command is launched.
 
 Useful options:
 
@@ -79,7 +79,7 @@ exclude it. The other supported settings are:
 ```toml
 [pipeline]
 date = "today"
-output_dir = "."
+output_dir = "output"
 
 [analysis]
 top_n = 20
