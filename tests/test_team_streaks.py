@@ -57,6 +57,34 @@ class TeamStreaksTests(unittest.TestCase):
         self.assertEqual(result, {})
         api.close.assert_awaited_once_with()
 
+    def test_fetch_team_streaks_uses_gaussian_delay_and_burst_pause(self):
+        api = Mock()
+        api.close = AsyncMock()
+        search = Mock()
+        search.search_match = AsyncMock(return_value={"results": [{"entity": {"id": 42}}]})
+        match = Mock()
+        match.team_streaks = AsyncMock(return_value={"wins": 4})
+
+        with patch.object(team_streaks, "SofascoreAPI", return_value=api), patch.object(
+            team_streaks, "Search", return_value=search
+        ), patch.object(team_streaks, "Match", return_value=match), patch.object(
+            team_streaks.random, "gauss", return_value=2.5
+        ) as gauss, patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock) as sleep:
+            result = asyncio.run(
+                team_streaks.fetch_team_streaks(
+                    [{"home_team": "Home", "awayTeam": "Away"}],
+                    request_interval=1.5,
+                    request_jitter=0.5,
+                    request_burst_size=1,
+                    request_burst_pause=0.0,
+                )
+            )
+
+        self.assertEqual(result, {"Home - Away": {"wins": 4}})
+        self.assertGreaterEqual(gauss.call_count, 1)
+        self.assertGreaterEqual(sleep.await_count, 1)
+        api.close.assert_awaited_once_with()
+
     def test_fetch_team_streaks_rejects_non_list_input(self):
         api = Mock()
         api.close = AsyncMock()

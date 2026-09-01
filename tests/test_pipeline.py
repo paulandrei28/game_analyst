@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from game_analyst import pipeline
+from game_analyst import pipeline # type: ignore
 
 
 class PipelineTests(unittest.TestCase):
@@ -67,6 +67,11 @@ class PipelineTests(unittest.TestCase):
         config.allowed_league_ids = {39}
         config.api_timeout_seconds = 10.0
         config.sofascore_request_interval_seconds = 0.0
+        config.sofascore_request_jitter_seconds = 0.5
+        config.sofascore_request_burst_size = 4
+        config.sofascore_request_burst_pause_seconds = 10.0
+        config.sofascore_request_backoff_base_seconds = 3.0
+        config.sofascore_request_max_retries = 2
 
         with patch.object(pipeline, "load_config", return_value=config), patch.object(
             pipeline, "resolve_date", return_value=__import__("datetime").date(2026, 8, 25)

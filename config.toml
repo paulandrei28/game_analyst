@@ -99,7 +99,7 @@ eredivisie = 88
 
 # Portugal
 primeira-liga = 94
-taca-de-portugal = 96
+# taca-de-portugal = 96
 # taca-da-liga = 97
 
 # Belgium
@@ -108,16 +108,11 @@ pro-league = 144
 
 # Turkey
 super-lig = 203
-# turkiye-kupasi = 206
-
-# Scotland
-premiership = 179
-# scottish-cup = 180
-
-# Americas (Popular Additions)
-major-league-soccer = 253
-brasil-serie-a = 71
-argentina-liga-profesional = 128
 
 [sofascore]
 request_interval_seconds = 2.0
+request_jitter_seconds = 1.0
+request_burst_size = 5
+request_burst_pause_seconds = 10.0
+request_backoff_base_seconds = 30.0
+request_max_retries = 2

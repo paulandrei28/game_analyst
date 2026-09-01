@@ -29,6 +29,11 @@ laliga = 140
 
 [sofascore]
 request_interval_seconds = 1.5
+request_jitter_seconds = 0.75
+request_burst_size = 5
+request_burst_pause_seconds = 12.0
+request_backoff_base_seconds = 3.0
+request_max_retries = 4
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.toml"
@@ -45,6 +50,11 @@ request_interval_seconds = 1.5
         self.assertEqual(config.output_dir, Path(directory) / "artifacts")
         self.assertEqual(config.api_timeout_seconds, 12)
         self.assertEqual(config.sofascore_request_interval_seconds, 1.5)
+        self.assertEqual(config.sofascore_request_jitter_seconds, 0.75)
+        self.assertEqual(config.sofascore_request_burst_size, 5)
+        self.assertEqual(config.sofascore_request_burst_pause_seconds, 12.0)
+        self.assertEqual(config.sofascore_request_backoff_base_seconds, 3.0)
+        self.assertEqual(config.sofascore_request_max_retries, 4)
 
     def test_load_config_rejects_unknown_league_and_invalid_threshold(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -8,6 +8,10 @@
 | `analysis_20260824` | 20 | 12 | 8 | **60.0%** |
 | `analysis_20260825` | 20 | 12 | 8 | **60.0%** |
 | `analysis_20260826` | 20 | 13 | 7 | **65.0%** |
+| `analysis_20260827` | 20 | 15 | 5 | **75.0%** |
+| `analysis_20260828` | 20 | 18 | 2 | **90.0%** |
+| `analysis_20260829` | 20 | 12 | 8 | **60.0%** |
+| `analysis_20260831` | 20 | 13 | 7 | **65.0%** |
 
 ### Misses
 
@@ -42,11 +46,34 @@
 | 26 Aug | 12 | Viking – Dinamo Zagreb | Over 10.5 corners | 8 corners |
 | 26 Aug | 13 | Lyon – Fenerbahçe | Lyon no losses | 1–2 |
 | 26 Aug | 18 | Viking – Dinamo Zagreb | Dinamo Zagreb no losses | 1–3 |
+| 27 Aug | 4 | Chelsea – Luton | Over 2.5 goals | 2–0 |
+| 27 Aug | 5 | KuPS – Shamrock Rovers | BTTS | 1–0 |
+| 27 Aug | 11 | CSKA Sofia – OFI | Over 2.5 goals | 0–2 |
+| 27 Aug | 14 | Hapoel Tel Aviv – Atalanta | Under 10.5 corners | 13 corners |
+| 27 Aug | 15 | Hradec Králové – Panathinaikos | Under 4.5 cards | 9 cards |
+| 28 Aug | 4 | Gençlerbirliği – Erzurumspor | Under 4.5 cards | 6 cards |
+| 28 Aug | 9 | Groningen – Fortuna Sittard | Under 4.5 cards | 6 cards |
+| 28 Aug | 13 | Genk – SK Beveren | BTTS | 4–0 |
+| 29 Aug | 2 | Lorient – Estac Troyes | Under 4.5 cards | 7 cards |
+| 29 Aug | 6 | Tottenham – Newcastle | BTTS | 0–2 |
+| 29 Aug | 9 | OH Leuven – Standard Liège | Under 4.5 cards | 9 cards |
+| 29 Aug | 12 | FC Voluntari – Oțelul | Under 10.5 corners | 15 corners |
+| 29 Aug | 13 | Genk – SK Beveren | BTTS | 4–0 |
+| 29 Aug | 16 | Juventus – Parma | Under 4.5 cards | 5 cards |
+| 29 Aug | 17 | Köln – Hoffenheim | Under 4.5 cards | 6 cards |
+| 29 Aug | 19 | Real Sociedad – Espanyol | Under 4.5 cards | 6 cards |
+| 31 Aug | 5 | Defensa y Justicia – Platense | Under 10.5 corners | 13 corners |
+| 31 Aug | 8 | Estudiantes L.P. – Newell's Old Boys | Under 10.5 corners | 11 corners |
+| 31 Aug | 13 | Aston Villa – Arsenal | Over 2.5 goals | 0–1 |
+| 31 Aug | 16 | Aston Villa – Arsenal | BTTS | 0–1 |
+| 31 Aug | 17 | Estudiantes L.P. – Newell's Old Boys | Estudiantes first to score | 0–0 |
+| 31 Aug | 18 | Barcelona – Rayo Vallecano | Barcelona first to score | Rayo scored first |
+| 31 Aug | 19 | Beşiktaş – Çorum FK | Under 2.5 goals | 6–2 |
 
 ### Overall
 
 
-- **100 predictions**
-- **73 hits**
-- **27 misses**
-- **73.0% accuracy**
+- **180 predictions**
+- **131 hits**
+- **49 misses**
+- **72.78% accuracy**

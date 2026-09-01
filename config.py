@@ -41,7 +41,12 @@ class AppConfig:
     league_ids: dict[str, int] | None = None
     enabled_leagues: tuple[str, ...] = ()
     api_timeout_seconds: float = 10.0
-    sofascore_request_interval_seconds: float = 5.0
+    sofascore_request_interval_seconds: float = 2.0
+    sofascore_request_jitter_seconds: float = 1.5
+    sofascore_request_burst_size: int = 5
+    sofascore_request_burst_pause_seconds: float = 12.0
+    sofascore_request_backoff_base_seconds: float = 3.0
+    sofascore_request_max_retries: int = 4
 
     @property
     def allowed_league_ids(self) -> set[int]:
@@ -96,9 +101,24 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         output_dir = config_path.parent / output_dir
 
     api_timeout = float(fixtures.get("api_timeout_seconds", 10.0))
-    request_interval = float(sofascore.get("request_interval_seconds", 5.0))
-    if api_timeout <= 0 or request_interval < 0:
-        raise ValueError("API timeout must be positive and request interval cannot be negative")
+    request_interval = float(sofascore.get("request_interval_seconds", 2.0))
+    request_jitter = float(sofascore.get("request_jitter_seconds", 1.5))
+    request_burst_size = int(sofascore.get("request_burst_size", 5))
+    request_burst_pause = float(sofascore.get("request_burst_pause_seconds", 12.0))
+    request_backoff_base = float(sofascore.get("request_backoff_base_seconds", 3.0))
+    request_max_retries = int(sofascore.get("request_max_retries", 4))
+    if (
+        api_timeout <= 0
+        or request_interval < 0
+        or request_jitter < 0
+        or request_burst_size < 1
+        or request_burst_pause < 0
+        or request_backoff_base <= 0
+        or request_max_retries < 0
+    ):
+        raise ValueError(
+            "API timeout must be positive and request pacing settings must be non-negative"
+        )
 
     return AppConfig(
         date=str(pipeline.get("date", "today")),
@@ -110,4 +130,9 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         enabled_leagues=enabled_leagues,
         api_timeout_seconds=api_timeout,
         sofascore_request_interval_seconds=request_interval,
+        sofascore_request_jitter_seconds=request_jitter,
+        sofascore_request_burst_size=request_burst_size,
+        sofascore_request_burst_pause_seconds=request_burst_pause,
+        sofascore_request_backoff_base_seconds=request_backoff_base,
+        sofascore_request_max_retries=request_max_retries,
     )

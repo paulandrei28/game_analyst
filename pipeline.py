@@ -63,6 +63,11 @@ async def run_pipeline(
         streaks = await fetch_team_streaks(
             games,
             request_interval=settings.sofascore_request_interval_seconds,
+            request_jitter=settings.sofascore_request_jitter_seconds,
+            request_burst_size=settings.sofascore_request_burst_size,
+            request_burst_pause=settings.sofascore_request_burst_pause_seconds,
+            request_backoff_base=settings.sofascore_request_backoff_base_seconds,
+            request_max_retries=settings.sofascore_request_max_retries,
         )
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
