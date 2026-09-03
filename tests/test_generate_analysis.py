@@ -14,7 +14,9 @@ class AnalysisGeneratorTests(unittest.TestCase):
     def test_generate_delegates_and_groups_predictions(self):
         analyzer = Mock()
         analyzer.analyze.return_value = [{"home": "A", "away": "B", "prediction": 3}]
-        analyzer.group_predictions_by_game.return_value = {"A - B": analyzer.analyze.return_value}
+        analyzer.group_predictions_by_game.return_value = {
+            "A - B": analyzer.analyze.return_value
+        }
         generator = AnalysisGenerator(analyzer)
 
         predictions, grouped = generator.generate({"A - B": {}}, top_n=4)
@@ -43,8 +45,13 @@ class AnalysisGeneratorTests(unittest.TestCase):
     def test_save_json_creates_parent_and_round_trips_data(self):
         generator = AnalysisGenerator()
         with tempfile.TemporaryDirectory() as directory:
-            output = generator.save_json({"A - B": [{"prediction": 1}]}, Path(directory) / "nested/out.json")
-            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {"A - B": [{"prediction": 1}]})
+            output = generator.save_json(
+                {"A - B": [{"prediction": 1}]}, Path(directory) / "nested/out.json"
+            )
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")),
+                {"A - B": [{"prediction": 1}]},
+            )
 
 
 if __name__ == "__main__":

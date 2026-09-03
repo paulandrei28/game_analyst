@@ -21,7 +21,12 @@ class ReportGeneratorTests(unittest.TestCase):
             "prediction": 19.6,
             "evidence": [
                 {"section": "general", "team": "home", "name": "Wins", "value": "5"},
-                {"section": "head2head", "team": "both", "name": "Wins", "value": "3/4"},
+                {
+                    "section": "head2head",
+                    "team": "both",
+                    "name": "Wins",
+                    "value": "3/4",
+                },
                 {"section": "future", "team": None, "name": "Signal", "value": "yes"},
             ],
             "supporting_evidence": [],
@@ -31,7 +36,9 @@ class ReportGeneratorTests(unittest.TestCase):
         report = HumanReadableReport().render([prediction], title="Daily")
 
         self.assertIn("# Daily", report)
-        self.assertIn("| 1 | Home - Away | Home wins | [View details](#prediction-1) |", report)
+        self.assertIn(
+            "| 1 | Home - Away | Home wins | [View details](#prediction-1) |", report
+        )
         self.assertIn("Home — Wins: **5**", report)
         self.assertIn("Both — Wins: **3/4**", report)
         self.assertIn("Future:", report)
@@ -43,7 +50,10 @@ class ReportGeneratorTests(unittest.TestCase):
             path = Path(directory) / "report.md"
             result = HumanReadableReport().save([], str(path), title="Saved")
             self.assertEqual(result, str(path))
-            self.assertEqual(path.read_text(encoding="utf-8"), "# Saved\n\nNo predictions were generated.\n")
+            self.assertEqual(
+                path.read_text(encoding="utf-8"),
+                "# Saved\n\nNo predictions were generated.\n",
+            )
 
     def test_render_includes_threshold_notice(self):
         report = HumanReadableReport().render(

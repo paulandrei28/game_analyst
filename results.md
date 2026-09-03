@@ -12,6 +12,8 @@
 | `analysis_20260828` | 20 | 18 | 2 | **90.0%** |
 | `analysis_20260829` | 20 | 12 | 8 | **60.0%** |
 | `analysis_20260831` | 20 | 13 | 7 | **65.0%** |
+| `analysis_20260901` | 20 | 8 | 12 | **40.0%** |
+| `analysis_20260902` | 20 | 15 | 5 | **75.0%** |
 
 ### Misses
 
@@ -69,11 +71,28 @@
 | 31 Aug | 17 | Estudiantes L.P. – Newell's Old Boys | Estudiantes first to score | 0–0 |
 | 31 Aug | 18 | Barcelona – Rayo Vallecano | Barcelona first to score | Rayo scored first |
 | 31 Aug | 19 | Beşiktaş – Çorum FK | Under 2.5 goals | 6–2 |
+| 1 Sep | 4 | Parma – Cremonese | Under 10.5 corners | 20 corners |
+| 1 Sep | 5 | Instituto Córdoba – San Lorenzo | Under 10.5 corners | 12 corners |
+| 1 Sep | 7 | Parma – Cremonese | Cremonese no wins | Cremonese won 0–2 |
+| 1 Sep | 9 | Parma – Cremonese | Cremonese first to concede | Cremonese scored first |
+| 1 Sep | 10 | Parma – Cremonese | Cremonese losses | Cremonese won 0–2 |
+| 1 Sep | 12 | Tigre – Barracas Central | Barracas Central no clean sheet | 0–0 |
+| 1 Sep | 13 | Parma – Cremonese | Cremonese no clean sheet | 0–2 |
+| 1 Sep | 15 | Parma – Cremonese | Both teams scoring | 0–2 |
+| 1 Sep | 16 | Instituto Córdoba – San Lorenzo | San Lorenzo no losses | San Lorenzo lost 1–0 |
+| 1 Sep | 17 | Instituto Córdoba – San Lorenzo | Instituto Córdoba no clean sheet | 1–0 |
+| 1 Sep | 18 | Tigre – Barracas Central | Tigre no clean sheet | 0–0 |
+| 1 Sep | 20 | Parma – Cremonese | Parma no losses | Parma lost 0–2 |
+| 2 Sep | 12 | Sassuolo – Frosinone | Over 2.5 goals | 1–1 |
+| 2 Sep | 13 | St. Truiden – Union St. Gilloise | Under 4.5 cards | 5 cards |
+| 2 Sep | 14 | Motherwell – Dundee Utd | Under 10.5 corners | 12 corners |
+| 2 Sep | 19 | St. Truiden – Union St. Gilloise | Both teams scoring | 0–3 |
+| 2 Sep | 20 | Flamengo – Mirassol | Both teams scoring | 2–0 |
 
 ### Overall
 
 
-- **180 predictions**
-- **131 hits**
-- **49 misses**
-- **72.78% accuracy**
+- **220 predictions**
+- **154 hits**
+- **66 misses**
+- **70.0% accuracy**

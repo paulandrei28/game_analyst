@@ -10,9 +10,17 @@ import fixtures_scraper
 class FixturesScraperTests(unittest.TestCase):
     def test_resolve_date_accepts_supported_relative_dates(self):
         reference = date(2026, 8, 25)
-        self.assertEqual(fixtures_scraper.resolve_date("yesterday", today=reference), date(2026, 8, 24))
-        self.assertEqual(fixtures_scraper.resolve_date("today", today=reference), reference)
-        self.assertEqual(fixtures_scraper.resolve_date("tomorrow", today=reference), date(2026, 8, 26))
+        self.assertEqual(
+            fixtures_scraper.resolve_date("yesterday", today=reference),
+            date(2026, 8, 24),
+        )
+        self.assertEqual(
+            fixtures_scraper.resolve_date("today", today=reference), reference
+        )
+        self.assertEqual(
+            fixtures_scraper.resolve_date("tomorrow", today=reference),
+            date(2026, 8, 26),
+        )
         with self.assertRaises(ValueError):
             fixtures_scraper.resolve_date("next-week", today=reference)
 
@@ -28,8 +36,12 @@ class FixturesScraperTests(unittest.TestCase):
                 {"league": {}},
             ],
         }
-        with patch.object(fixtures_scraper.requests, "get", return_value=response) as request:
-            matches = fixtures_scraper.get_filtered_matches("2026-08-25", api_key="secret")
+        with patch.object(
+            fixtures_scraper.requests, "get", return_value=response
+        ) as request:
+            matches = fixtures_scraper.get_filtered_matches(
+                "2026-08-25", api_key="secret"
+            )
 
         response.raise_for_status.assert_called_once_with()
         request.assert_called_once_with(
@@ -56,9 +68,13 @@ class FixturesScraperTests(unittest.TestCase):
             path = Path(directory) / "fixtures/fixtures_20260825.txt"
             path.parent.mkdir()
             path.write_text("A - B\n\nC - D\n", encoding="utf-8")
-            with patch.object(fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)):
+            with patch.object(
+                fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)
+            ):
                 with patch.object(fixtures_scraper, "get_filtered_matches") as fetch:
-                    fixtures, actual_path = fixtures_scraper.load_or_fetch_fixtures(output_dir=directory)
+                    fixtures, actual_path = fixtures_scraper.load_or_fetch_fixtures(
+                        output_dir=directory
+                    )
 
             self.assertEqual(fixtures, ["A - B", "C - D"])
             self.assertEqual(actual_path, path)
@@ -66,11 +82,15 @@ class FixturesScraperTests(unittest.TestCase):
 
     def test_load_or_fetch_fixtures_fetches_and_writes_missing_cache(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)):
+            with patch.object(
+                fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)
+            ):
                 with patch.object(
                     fixtures_scraper,
                     "get_filtered_matches",
-                    return_value=[{"teams": {"home": {"name": "A"}, "away": {"name": "B"}}}],
+                    return_value=[
+                        {"teams": {"home": {"name": "A"}, "away": {"name": "B"}}}
+                    ],
                 ):
                     fixtures, path = fixtures_scraper.load_or_fetch_fixtures(
                         output_dir=directory,

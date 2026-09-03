@@ -50,7 +50,9 @@ async def run_pipeline(
 
     streaks = _load_cached_streaks(streaks_path)
     if streaks is None:
-        LOGGER.info("No valid team streak cache for %s; collecting fresh data", date_option)
+        LOGGER.info(
+            "No valid team streak cache for %s; collecting fresh data", date_option
+        )
         games, _ = load_or_fetch_fixtures(
             date_option,
             output_dir=output_root,
@@ -85,7 +87,11 @@ async def run_pipeline(
     report_generator = HumanReadableReport()
     threshold_notice = None
     excluded_count = getattr(generator.analyzer, "threshold_excluded_count", 0)
-    if prediction_threshold is not None and isinstance(excluded_count, int) and excluded_count:
+    if (
+        prediction_threshold is not None
+        and isinstance(excluded_count, int)
+        and excluded_count
+    ):
         threshold_notice = (
             f"Prediction threshold {prediction_threshold:.2f} excluded "
             f"{excluded_count} prediction(s); only {len(predictions)} met the threshold."
@@ -162,7 +168,9 @@ def main() -> None:
             run_pipeline(
                 date_option=args.date or settings.date,
                 top_n=settings.top_n if args.top_n is None else args.top_n,
-                output_dir=settings.output_dir if args.output_dir is None else args.output_dir,
+                output_dir=(
+                    settings.output_dir if args.output_dir is None else args.output_dir
+                ),
                 prediction_threshold=settings.prediction_threshold,
                 config=settings,
             )

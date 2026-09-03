@@ -14,6 +14,8 @@ DATE_OPTIONS = ("yesterday", "today", "tomorrow")
 
 BASE_URL = "https://v3.football.api-sports.io/fixtures"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+
+
 def resolve_date(date_option: str, *, today: date | None = None) -> date:
     """Resolve one of the API's supported relative date options."""
     if date_option not in DATE_OPTIONS:
@@ -73,10 +75,11 @@ def get_filtered_matches(
     filtered_matches = [
         match
         for match in matches
-        if match.get("league", {}).get("id")
-        in allowed_league_ids
+        if match.get("league", {}).get("id") in allowed_league_ids
     ]
-    LOGGER.info("Fixtures remaining after top-tournament filter: %d", len(filtered_matches))
+    LOGGER.info(
+        "Fixtures remaining after top-tournament filter: %d", len(filtered_matches)
+    )
     return filtered_matches
 
 
@@ -107,7 +110,9 @@ def load_or_fetch_fixtures(
     target_date = resolve_date(date_option)
     path = cache_path(output_dir, target_date)
     if path.is_file():
-        fixtures = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+        fixtures = [
+            line for line in path.read_text(encoding="utf-8").splitlines() if line
+        ]
         LOGGER.info("Using cached fixtures from %s", path)
         return fixtures, path
 
@@ -126,7 +131,9 @@ def load_or_fetch_fixtures(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch top football fixtures from API-Football.")
+    parser = argparse.ArgumentParser(
+        description="Fetch top football fixtures from API-Football."
+    )
     parser.add_argument("date", choices=DATE_OPTIONS, nargs="?", default="today")
     parser.add_argument(
         "--output-dir",
@@ -135,7 +142,9 @@ def main() -> None:
         help="Root directory containing the fixtures cache.",
     )
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     fixtures, path = load_or_fetch_fixtures(args.date, output_dir=args.output_dir)
     print(f"Fixtures for {args.date} ({len(fixtures)}):")
     print("\n".join(fixtures))

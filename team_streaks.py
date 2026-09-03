@@ -57,7 +57,11 @@ def _compute_human_delay(
         delay = max(base_delay * 0.7, random.gauss(mean_delay, std_dev))
         delay = min(delay, base_delay + request_jitter * 2.5)
 
-    if request_burst_size > 0 and request_count > 0 and request_count % request_burst_size == 0:
+    if (
+        request_burst_size > 0
+        and request_count > 0
+        and request_count % request_burst_size == 0
+    ):
         burst_pause = max(0.0, request_burst_pause)
         if burst_pause > 0:
             # Using a randomized burst pause makes the traffic look human rather than periodic.
@@ -115,8 +119,12 @@ async def _call_with_backoff(
     for attempt in range(request_max_retries + 1):
         try:
             return await action()
-        except Exception as exc:  # pragma: no cover - library may surface rate-limit errors differently
-            status_code = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - library may surface rate-limit errors differently
+            status_code = getattr(exc, "status", None) or getattr(
+                exc, "status_code", None
+            )
             if status_code not in {429, 403}:
                 raise
             if attempt >= request_max_retries:

@@ -77,7 +77,9 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     enabled_leagues = tuple(fixtures.get("enabled_leagues", league_ids))
     unknown_leagues = sorted(set(enabled_leagues) - set(league_ids))
     if unknown_leagues:
-        raise ValueError(f"Unknown league names in config: {', '.join(unknown_leagues)}")
+        raise ValueError(
+            f"Unknown league names in config: {', '.join(unknown_leagues)}"
+        )
 
     top_n = int(analysis.get("top_n", 20))
     if top_n < 1:

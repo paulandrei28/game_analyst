@@ -51,3 +51,5 @@ Thumbs.db
 
 # Generated analysis history
 output/
+
+nightly_runner.py

@@ -92,7 +92,7 @@ class HumanReadableReport:
 
         supporting = prediction.get("supporting_evidence", [])
         if supporting:
-            lines.extend(["", "**Supporting evidence**"] )
+            lines.extend(["", "**Supporting evidence**"])
             lines.extend(
                 self._render_evidence(
                     supporting,
@@ -103,12 +103,12 @@ class HumanReadableReport:
 
         bonuses = prediction.get("bonuses", [])
         if bonuses:
-            lines.extend(["", "**Why the prediction is strengthened**"] )
+            lines.extend(["", "**Why the prediction is strengthened**"])
             lines.extend(f"- {self._clean_bonus(item)}" for item in bonuses)
 
         penalties = prediction.get("penalties", [])
         if penalties:
-            lines.extend(["", "**Conflicting evidence**"] )
+            lines.extend(["", "**Conflicting evidence**"])
             lines.extend(f"- {item}" for item in penalties)
 
         lines.extend(["", "</details>"])
@@ -121,8 +121,7 @@ class HumanReadableReport:
         game = f"{prediction['home']} - {prediction['away']}"
         market = prediction["market"]
         return (
-            f"| {rank} | {game} | {market} | "
-            f"[View details](#prediction-{rank}) |"
+            f"| {rank} | {game} | {market} | " f"[View details](#prediction-{rank}) |"
         )
 
     def _render_evidence(

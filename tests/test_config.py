@@ -60,16 +60,16 @@ request_max_retries = 4
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.toml"
             path.write_text(
-                '[fixtures]\n'
+                "[fixtures]\n"
                 'enabled_leagues = ["made-up"]\n'
-                '[fixtures.leagues]\n'
-                'premier-league = 39\n',
+                "[fixtures.leagues]\n"
+                "premier-league = 39\n",
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "Unknown league"):
                 load_config(path)
 
-            path.write_text('[analysis]\nprediction_threshold = -1\n', encoding="utf-8")
+            path.write_text("[analysis]\nprediction_threshold = -1\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "non-negative"):
                 load_config(path)
 

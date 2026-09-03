@@ -92,7 +92,9 @@ class AnalyzerHelpersTests(unittest.TestCase):
         score_candidate(candidate)
 
         self.assertGreater(candidate.score, 0)
-        self.assertAlmostEqual(prediction_value(candidate), candidate.score * candidate.confidence)
+        self.assertAlmostEqual(
+            prediction_value(candidate), candidate.score * candidate.confidence
+        )
         self.assertEqual(display_market(candidate), "Home FC wins")
 
 

@@ -14,16 +14,21 @@ class TeamStreaksTests(unittest.TestCase):
         api = Mock()
         api.close = AsyncMock()
         search = Mock()
-        search.search_match = AsyncMock(return_value={"results": [{"entity": {"id": 42}}]})
+        search.search_match = AsyncMock(
+            return_value={"results": [{"entity": {"id": 42}}]}
+        )
         match = Mock()
         match.team_streaks = AsyncMock(return_value={"wins": 4})
 
-        with patch.object(team_streaks, "SofascoreAPI", return_value=api), patch.object(
-            team_streaks, "Search", return_value=search
-        ) as search_constructor, patch.object(
-            team_streaks, "Match", return_value=match
-        ) as match_constructor, patch.object(
-            team_streaks.asyncio, "sleep", new_callable=AsyncMock
+        with (
+            patch.object(team_streaks, "SofascoreAPI", return_value=api),
+            patch.object(
+                team_streaks, "Search", return_value=search
+            ) as search_constructor,
+            patch.object(
+                team_streaks, "Match", return_value=match
+            ) as match_constructor,
+            patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock),
         ):
             result = asyncio.run(
                 team_streaks.fetch_team_streaks(
@@ -49,9 +54,11 @@ class TeamStreaksTests(unittest.TestCase):
         search = Mock()
         search.search_match = AsyncMock(return_value={"results": []})
 
-        with patch.object(team_streaks, "SofascoreAPI", return_value=api), patch.object(
-            team_streaks, "Search", return_value=search
-        ), patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock):
+        with (
+            patch.object(team_streaks, "SofascoreAPI", return_value=api),
+            patch.object(team_streaks, "Search", return_value=search),
+            patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock),
+        ):
             result = asyncio.run(team_streaks.fetch_team_streaks(["Home - Away"]))
 
         self.assertEqual(result, {})
@@ -61,15 +68,21 @@ class TeamStreaksTests(unittest.TestCase):
         api = Mock()
         api.close = AsyncMock()
         search = Mock()
-        search.search_match = AsyncMock(return_value={"results": [{"entity": {"id": 42}}]})
+        search.search_match = AsyncMock(
+            return_value={"results": [{"entity": {"id": 42}}]}
+        )
         match = Mock()
         match.team_streaks = AsyncMock(return_value={"wins": 4})
 
-        with patch.object(team_streaks, "SofascoreAPI", return_value=api), patch.object(
-            team_streaks, "Search", return_value=search
-        ), patch.object(team_streaks, "Match", return_value=match), patch.object(
-            team_streaks.random, "gauss", return_value=2.5
-        ) as gauss, patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock) as sleep:
+        with (
+            patch.object(team_streaks, "SofascoreAPI", return_value=api),
+            patch.object(team_streaks, "Search", return_value=search),
+            patch.object(team_streaks, "Match", return_value=match),
+            patch.object(team_streaks.random, "gauss", return_value=2.5) as gauss,
+            patch.object(
+                team_streaks.asyncio, "sleep", new_callable=AsyncMock
+            ) as sleep,
+        ):
             result = asyncio.run(
                 team_streaks.fetch_team_streaks(
                     [{"home_team": "Home", "awayTeam": "Away"}],
