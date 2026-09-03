@@ -50,6 +50,8 @@ ENV.venv/
 Thumbs.db
 
 # Generated analysis history
-output/
+output/*
+!output/report/
+!output/report/**
 
 nightly_runner.py
