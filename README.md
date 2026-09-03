@@ -51,12 +51,27 @@ Set `API_FOOTBALL_API_KEY` before fetching fixtures. The API-Football free plan 
 ## GitHub Actions
 
 The workflow in `.github/workflows/daily-report.yml` generates the daily report
-automatically at 06:00 UTC and uploads only the Markdown report as a workflow
-artifact. It can also be started manually from the **Actions** tab.
+automatically at 06:00 UTC and uploads the report artifacts. It can also be
+started manually from the **Actions** tab.
 
 Add `API_FOOTBALL_API_KEY` as a repository secret under **Settings > Secrets
 and variables > Actions** before running the workflow. Reports are retained for
 30 days and can be downloaded from the workflow run's **Artifacts** section.
+
+## Static web app publishing
+
+The separate `betman` repository is a static GitHub Pages PWA for browsing the
+generated reports. Keep its checkout beside this repository. The nightly runner
+exports formatted analysis JSON files into `betman/data/`,
+updates `data/reports.json`, and pushes the Pages repository after a successful
+analysis.
+
+```powershell
+python nightly_runner.py
+```
+
+The Pages site must be public for GitHub Pages to serve it publicly. The web
+app contains no API keys and performs no scraping; it only reads static files.
 
 ## Run
 

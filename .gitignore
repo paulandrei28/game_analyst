@@ -54,4 +54,3 @@ output/*
 !output/report/
 !output/report/**
 
-nightly_runner.py
