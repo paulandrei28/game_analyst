@@ -26,12 +26,40 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _run_logged(
+    command: list[str],
+    *,
+    cwd: Path,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+
+    for line in result.stdout.splitlines():
+        logger.info("[%s] %s", command[0], line)
+    for line in result.stderr.splitlines():
+        logger.error("[%s] %s", command[0], line)
+
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+    return result
+
+
 def main():
     logger.info("Nightly runner started.")
     logger.info("Starting game-analyst --date tomorrow...")
 
     try:
-        subprocess.run(
+        _run_logged(
             [
                 "game-analyst",
                 "--date",
@@ -48,19 +76,17 @@ def main():
 
         logger.info("Running git add .")
 
-        subprocess.run(
+        _run_logged(
             ["git", "add", "."],
             cwd=PROJECT_DIR,
-            check=True,
         )
 
         logger.info("Running git commit -m 'nightly results'")
 
-        commit = subprocess.run(
+        commit = _run_logged(
             ["git", "commit", "-m", "nightly results"],
             cwd=PROJECT_DIR,
-            capture_output=True,
-            text=True,
+            check=False,
         )
 
         if commit.returncode == 0:
@@ -83,10 +109,9 @@ def main():
 
         logger.info("Running git push origin main.")
 
-        subprocess.run(
+        _run_logged(
             ["git", "push", "origin", "main"],
             cwd=PROJECT_DIR,
-            check=True,
         )
 
         _publish_pages_repository()
@@ -114,12 +139,11 @@ def _publish_pages_repository() -> None:
             "Place the betman checkout beside game_analyst."
         )
 
-    subprocess.run(["git", "add", "data"], cwd=BETMAN_DIR, check=True)
-    commit = subprocess.run(
+    _run_logged(["git", "add", "data"], cwd=BETMAN_DIR)
+    commit = _run_logged(
         ["git", "commit", "-m", "daily report update"],
         cwd=BETMAN_DIR,
-        capture_output=True,
-        text=True,
+        check=False,
     )
     if commit.returncode not in (0, 1):
         raise subprocess.CalledProcessError(
@@ -136,7 +160,7 @@ def _publish_pages_repository() -> None:
             stderr=commit.stderr,
         )
 
-    subprocess.run(["git", "push", "origin", "main"], cwd=BETMAN_DIR, check=True)
+    _run_logged(["git", "push", "origin", "main"], cwd=BETMAN_DIR)
 
 
 if __name__ == "__main__":
