@@ -13,10 +13,10 @@ class WebExportTests(unittest.TestCase):
             analysis_dir = root / "output" / "analysis"
             analysis_dir.mkdir(parents=True)
             (analysis_dir / "analysis_20260902.json").write_text(
-                '{"old": []}', encoding="utf-8"
+                '{"date":"20260902","predictions":[]}', encoding="utf-8"
             )
             (analysis_dir / "analysis_20260904.json").write_text(
-                '{"new": []}', encoding="utf-8"
+                '{"date":"20260904","predictions":[]}', encoding="utf-8"
             )
 
             destination = root / "site"
@@ -33,8 +33,17 @@ class WebExportTests(unittest.TestCase):
                 json.loads(
                     (destination / "data" / "reports" / "20260904.json").read_text()
                 ),
-                {"date": "20260904", "predictions": {"new": []}},
+                {"date": "20260904", "predictions": []},
             )
+
+    def test_export_reports_wraps_legacy_grouped_payload_for_compatibility(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            analysis_dir = root / "output" / "analysis"
+            analysis_dir.mkdir(parents=True)
+            (analysis_dir / "analysis_20260904.json").write_text('{"A - B": []}', encoding="utf-8")
+            export_reports(root / "output", root / "site")
+            self.assertEqual(json.loads((root / "site/data/reports/20260904.json").read_text()), {"date": "20260904", "predictions": {"A - B": []}})
 
     def test_export_reports_ignores_invalid_names_and_missing_analysis(self):
         with tempfile.TemporaryDirectory() as directory:

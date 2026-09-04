@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -55,7 +56,9 @@ def _run_logged(
 
 
 def main():
-    logger.info("Nightly runner started.")
+    logger.info("Nightly runner started; waiting 10 minutes for system connections.")
+    time.sleep(10 * 60)
+    logger.info("Startup buffer complete.")
     logger.info("Starting game-analyst --date tomorrow...")
 
     try:

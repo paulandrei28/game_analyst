@@ -37,8 +37,9 @@ class PipelineTests(unittest.TestCase):
     def test_run_pipeline_uses_cache_and_writes_analysis_and_report(self):
         generator = Mock()
         predictions = [{"home": "A", "away": "B", "prediction": 1}]
-        grouped = {"A - B": predictions}
-        generator.generate.return_value = (predictions, grouped)
+        payload = {"date": "20260825", "predictions": predictions}
+        generator.generate.return_value = predictions
+        generator.build_payload.return_value = payload
         report_generator = Mock()
 
         with tempfile.TemporaryDirectory() as directory:
@@ -56,25 +57,27 @@ class PipelineTests(unittest.TestCase):
                     pipeline, "HumanReadableReport", return_value=report_generator
                 ),
                 patch.object(
+                    pipeline,
+                    "load_or_fetch_fixtures_with_metadata",
+                    return_value=(["A - B"], {"A - B": {"id": 39, "name": "Premier League"}}, Path(directory) / "fixtures/fixtures_20260825.json"),
+                ),
+                patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
             ):
                 artifacts = asyncio.run(
-                    pipeline.run_pipeline(output_dir=directory, top_n=3)
+                    pipeline.run_pipeline(output_dir=directory)
                 )
 
             fetch.assert_not_awaited()
             generator.generate.assert_called_once_with(
-                {"A - B": {}}, top_n=3, prediction_threshold=None
+                {"A - B": {}}, prediction_threshold=None
             )
-            generator.save_json.assert_called_once_with(grouped, artifacts["analysis"])
+            generator.save_json.assert_called_once_with(payload, artifacts["analysis"])
+            self.assertEqual(generator.build_payload.call_args.kwargs["fixture_metadata"]["A - B"]["id"], 39)
             report_generator.save.assert_called_once()
             self.assertTrue(artifacts["analysis"].parent.is_dir())
             self.assertEqual(artifacts["report"].name, "report_20260825.md")
-
-    def test_run_pipeline_rejects_non_positive_top_n(self):
-        with self.assertRaisesRegex(ValueError, "top_n must be at least 1"):
-            asyncio.run(pipeline.run_pipeline(top_n=0))
 
     def test_run_pipeline_stops_before_streaks_when_fixtures_are_empty(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -84,11 +87,7 @@ class PipelineTests(unittest.TestCase):
                     "resolve_date",
                     return_value=__import__("datetime").date(2026, 8, 25),
                 ),
-                patch.object(
-                    pipeline,
-                    "load_or_fetch_fixtures",
-                    return_value=([], Path(directory) / "fixtures.txt"),
-                ),
+                patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", return_value=([], {}, Path(directory) / "fixtures.json")),
                 patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
@@ -108,14 +107,7 @@ class PipelineTests(unittest.TestCase):
                     "resolve_date",
                     return_value=__import__("datetime").date(2026, 8, 25),
                 ),
-                patch.object(
-                    pipeline,
-                    "load_or_fetch_fixtures",
-                    return_value=(
-                        ["A - B"],
-                        Path(directory) / "fixtures/fixtures_20260825.txt",
-                    ),
-                ),
+                patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", return_value=(["A - B"], {"A - B": {"id": 39, "name": "Premier League"}}, Path(directory) / "fixtures/fixtures_20260825.json")),
                 patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
@@ -131,10 +123,11 @@ class PipelineTests(unittest.TestCase):
     def test_run_pipeline_loads_default_config_when_not_supplied(self):
         config = Mock()
         config.date = "today"
-        config.top_n = 2
         config.output_dir = Path("output")
         config.prediction_threshold = None
         config.allowed_league_ids = {39}
+        config.league_ids = {}
+        config.enabled_markets = ()
         config.api_timeout_seconds = 10.0
         config.sofascore_request_interval_seconds = 0.0
         config.sofascore_request_jitter_seconds = 0.5
@@ -151,10 +144,12 @@ class PipelineTests(unittest.TestCase):
                 return_value=__import__("datetime").date(2026, 8, 25),
             ),
             patch.object(pipeline, "_load_cached_streaks", return_value={}),
+            patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", side_effect=RuntimeError("offline")),
             patch.object(pipeline, "AnalysisGenerator") as generator_class,
             patch.object(pipeline, "HumanReadableReport"),
         ):
-            generator_class.return_value.generate.return_value = ([], {})
+            generator_class.return_value.generate.return_value = []
+            generator_class.return_value.build_payload.return_value = {"date": "20260825", "predictions": []}
             asyncio.run(pipeline.run_pipeline())
 
         generator_class.assert_called_once_with(enabled_markets=config.enabled_markets)

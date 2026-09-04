@@ -132,6 +132,17 @@ class FixturesScraperTests(unittest.TestCase):
 
             self.assertFalse(path.exists())
 
+    def test_metadata_cache_preserves_league_id_and_name_and_is_reused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            matches = [{"teams": {"home": {"name": "A"}, "away": {"name": "B"}}, "league": {"id": 39, "name": "Premier League"}}]
+            with patch.object(fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)), patch.object(fixtures_scraper, "get_filtered_matches", return_value=matches) as fetch:
+                fixtures, metadata, path = fixtures_scraper.load_or_fetch_fixtures_with_metadata(output_dir=directory, api_key="key")
+                cached_fixtures, cached_metadata, cached_path = fixtures_scraper.load_or_fetch_fixtures_with_metadata(output_dir=directory, api_key="key")
+            self.assertEqual(fixtures, ["A - B"])
+            self.assertEqual(metadata["A - B"], {"id": 39, "name": "Premier League"})
+            self.assertEqual((cached_fixtures, cached_metadata, cached_path), (fixtures, metadata, path))
+            fetch.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

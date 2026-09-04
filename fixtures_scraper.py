@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from datetime import date, timedelta
@@ -96,6 +97,71 @@ def format_fixtures(matches: list[dict]) -> list[str]:
 
 def cache_path(output_dir: str | Path, target_date: date) -> Path:
     return Path(output_dir) / "fixtures" / f"fixtures_{target_date:%Y%m%d}.txt"
+
+
+def metadata_cache_path(output_dir: str | Path, target_date: date) -> Path:
+    """Return the date-specific cache that retains fixture league metadata."""
+    return Path(output_dir) / "fixtures" / f"fixtures_{target_date:%Y%m%d}.json"
+
+
+def fixture_metadata(matches: list[dict]) -> dict[str, dict[str, int | str | None]]:
+    """Map a formatted game name to the league information returned by the API."""
+    metadata: dict[str, dict[str, int | str]] = {}
+    for match in matches:
+        home = match.get("teams", {}).get("home", {}).get("name")
+        away = match.get("teams", {}).get("away", {}).get("name")
+        league = match.get("league", {})
+        if home and away:
+            metadata[f"{home} - {away}"] = {
+                "id": league.get("id"),
+                "name": league.get("name") or "Unknown",
+            }
+    return metadata
+
+
+def load_or_fetch_fixtures_with_metadata(
+    date_option: str = "today",
+    *,
+    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    api_key: str | None = None,
+    allowed_league_ids: set[int] | None = None,
+    api_timeout_seconds: float = 10.0,
+) -> tuple[list[str], dict[str, dict[str, int | str | None]], Path]:
+    """Load fixtures and their league metadata, reusing a date-specific cache.
+
+    The legacy newline-delimited fixture cache remains supported through
+    :func:`load_or_fetch_fixtures`; this JSON cache is additive.
+    """
+    target_date = resolve_date(date_option)
+    path = metadata_cache_path(output_dir, target_date)
+    if path.is_file():
+        try:
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            metadata = cached["fixtures"]
+            if not isinstance(metadata, dict) or not metadata:
+                raise ValueError("empty or invalid fixtures metadata")
+            fixtures = list(metadata)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, TypeError):
+            LOGGER.warning("Ignoring invalid fixture metadata cache: %s", path)
+        else:
+            LOGGER.info("Using cached fixture metadata from %s", path)
+            return fixtures, metadata, path
+
+    matches = get_filtered_matches(
+        target_date.isoformat(),
+        api_key=api_key,
+        allowed_league_ids=allowed_league_ids,
+        api_timeout_seconds=api_timeout_seconds,
+    )
+    metadata = fixture_metadata(matches)
+    if not metadata:
+        LOGGER.error("No fixtures found for %s; stopping before writing a cache", date_option)
+        raise RuntimeError(f"No fixtures found for {date_option}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"fixtures": metadata}, indent=2, ensure_ascii=False), encoding="utf-8")
+    LOGGER.info("Fixture metadata written to %s", path)
+    return list(metadata), metadata, path
 
 
 def load_or_fetch_fixtures(

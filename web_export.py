@@ -35,13 +35,16 @@ def export_reports(
         report_date = match.group("date")
         report_name = f"{report_date}.json"
         data = json.loads(source_path.read_text(encoding="utf-8"))
+        # Current analysis artifacts are already complete web payloads.  Keep
+        # older grouped artifacts readable by wrapping them as before.
+        payload = (
+            data
+            if isinstance(data, dict) and {"date", "predictions"} <= set(data)
+            else {"date": report_date, "predictions": data}
+        )
         destination_path = destination_reports / report_name
         destination_path.write_text(
-            json.dumps(
-                {"date": report_date, "predictions": data},
-                indent=2,
-                ensure_ascii=False,
-            )
+            json.dumps(payload, indent=2, ensure_ascii=False)
             + "\n",
             encoding="utf-8",
         )

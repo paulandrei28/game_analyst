@@ -9,7 +9,11 @@ from pathlib import Path
 from .config import AppConfig, DEFAULT_CONFIG_PATH, load_config
 from .generate_analysis import AnalysisGenerator
 from .report_generator import HumanReadableReport
-from .fixtures_scraper import DATE_OPTIONS, load_or_fetch_fixtures, resolve_date
+from .fixtures_scraper import (
+    DATE_OPTIONS,
+    load_or_fetch_fixtures_with_metadata,
+    resolve_date,
+)
 from .team_streaks import fetch_team_streaks
 
 LOGGER = logging.getLogger(__name__)
@@ -18,7 +22,6 @@ LOGGER = logging.getLogger(__name__)
 async def run_pipeline(
     *,
     date_option: str | None = None,
-    top_n: int | None = None,
     output_dir: str | Path | None = None,
     prediction_threshold: float | None = None,
     config: AppConfig | None = None,
@@ -26,13 +29,9 @@ async def run_pipeline(
     """Scrape, enrich, analyze, and save the daily match artifacts."""
     settings = config or load_config()
     date_option = settings.date if date_option is None else date_option
-    top_n = settings.top_n if top_n is None else top_n
     output_dir = settings.output_dir if output_dir is None else output_dir
     if prediction_threshold is None:
         prediction_threshold = settings.prediction_threshold
-
-    if top_n < 1:
-        raise ValueError("top_n must be at least 1")
 
     target_date = resolve_date(date_option)
     output_root = Path(output_dir)
@@ -50,14 +49,17 @@ async def run_pipeline(
 
     streaks = _load_cached_streaks(streaks_path)
     if streaks is None:
-        LOGGER.info(
-            "No valid team streak cache for %s; collecting fresh data", date_option
-        )
-        games, _ = load_or_fetch_fixtures(
+        # League metadata is cached independently so the historical streak
+        # cache remains its original game-to-stats mapping.
+        games, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
             date_option,
             output_dir=output_root,
             allowed_league_ids=settings.allowed_league_ids,
             api_timeout_seconds=settings.api_timeout_seconds,
+        )
+        LOGGER.info("Fixture metadata contains %d games", len(games))
+        LOGGER.info(
+            "No valid team streak cache for %s; collecting fresh data", date_option
         )
         LOGGER.info("Scraper returned %d games", len(games))
         if not games:
@@ -80,14 +82,31 @@ async def run_pipeline(
         LOGGER.info("Team streaks written to %s", streaks_path)
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
+        try:
+            _, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
+                date_option,
+                output_dir=output_root,
+                allowed_league_ids=settings.allowed_league_ids,
+                api_timeout_seconds=settings.api_timeout_seconds,
+            )
+        except Exception:
+            # A historical streak file is still publishable when its separate
+            # metadata cache cannot be reconstructed. Predictions get the
+            # explicit Unknown marker in build_payload.
+            LOGGER.warning("Fixture metadata unavailable; publishing Unknown leagues", exc_info=True)
+            fixture_metadata = {}
 
     generator = AnalysisGenerator(enabled_markets=settings.enabled_markets)
-    predictions, grouped_predictions = generator.generate(
+    predictions = generator.generate(
         streaks,
-        top_n=top_n,
         prediction_threshold=prediction_threshold,
     )
-    generator.save_json(grouped_predictions, analysis_path)
+    payload = generator.build_payload(
+        date=output_date,
+        predictions=predictions,
+        fixture_metadata=fixture_metadata,
+    )
+    generator.save_json(payload, analysis_path)
 
     report_generator = HumanReadableReport()
     threshold_notice = None
@@ -151,12 +170,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--date", choices=DATE_OPTIONS)
     parser.add_argument(
-        "--top-n",
-        type=int,
-        default=None,
-        help="Number of predictions to retain (default: 20).",
-    )
-    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
@@ -176,7 +189,6 @@ def main() -> None:
         artifacts = asyncio.run(
             run_pipeline(
                 date_option=args.date or settings.date,
-                top_n=settings.top_n if args.top_n is None else args.top_n,
                 output_dir=(
                     settings.output_dir if args.output_dir is None else args.output_dir
                 ),

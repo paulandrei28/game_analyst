@@ -6,8 +6,6 @@ date = "today"
 output_dir = "output"
 
 [analysis]
-top_n = 20
-
 # Optional: uncomment to exclude predictions below this computed value.
 prediction_threshold = 65.0
 
@@ -61,58 +59,58 @@ copa-sudamericana = 11
 
 # Romania
 superliga = 283
-# cupa-romaniei = 286
+cupa-romaniei = 286
 
 # England
 premier-league = 39
-# fa-cup = 45
-# championship = 40
-# efl-cup = 48
+fa-cup = 45
+championship = 40
+efl-cup = 48
 
 # Spain
 laliga = 140
 copa-del-rey = 143
-# laliga-hypermotion = 141
-# supercopa-de-espana = 556
+laliga-hypermotion = 141
+supercopa-de-espana = 556
 
 # Italy
 serie-a = 135
 coppa-italia = 137
-# serie-b = 136
-# supercoppa-italiana = 547
+serie-b = 136
+supercoppa-italiana = 547
 
 # Germany
 bundesliga = 78
 dfb-pokal = 81
-# 2-bundesliga = 79
-# dfl-supercup = 529
+2-bundesliga = 79
+dfl-supercup = 529
 
 # France
 ligue-1 = 61
 coupe-de-france = 66
-# ligue-2 = 62
-# trophee-des-champions = 526
+ligue-2 = 62
+trophee-des-champions = 526
 
 # Netherlands
 eredivisie = 88
-# knvb-beker = 90
+knvb-beker = 90
 
 # Portugal
 primeira-liga = 94
-# taca-de-portugal = 96
-# taca-da-liga = 97
+taca-de-portugal = 96
+taca-da-liga = 97
 
 # Belgium
 pro-league = 144
-# belgian-cup = 147
+belgian-cup = 147
 
 # Turkey
 super-lig = 203
 
 [sofascore]
-request_interval_seconds = 4.0
-request_jitter_seconds = 2.0
+request_interval_seconds = 5.0
+request_jitter_seconds = 5.0
 request_burst_size = 5
 request_burst_pause_seconds = 30.0
-request_backoff_base_seconds = 30.0
+request_backoff_base_seconds = 60.0
 request_max_retries = 2

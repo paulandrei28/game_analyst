@@ -70,7 +70,7 @@ class AnalyzerHelpersTests(unittest.TestCase):
             enabled_markets=("btts",),
         )
 
-        predictions = analyzer.analyze(top_n=10)
+        predictions = analyzer.analyze()
 
         self.assertEqual(len(predictions), 1)
         self.assertEqual(predictions[0]["market"], "both teams scoring")
@@ -113,12 +113,12 @@ class AnalyzerIntegrationTests(unittest.TestCase):
             }
         )
 
-        predictions = analyzer.analyze(top_n=1)
+        predictions = analyzer.analyze()
 
-        self.assertEqual(len(predictions), 1)
+        self.assertGreaterEqual(len(predictions), 2)
         self.assertEqual(predictions[0]["rank"], 1)
-        self.assertEqual(predictions[0]["market"], "Home FC wins")
-        self.assertEqual(predictions[0]["home"], "Home FC")
+        self.assertEqual([prediction["rank"] for prediction in predictions], list(range(1, len(predictions) + 1)))
+        self.assertEqual(predictions, sorted(predictions, key=lambda item: (-item["score"], -item["prediction"], -item["confidence"], item["home"].casefold(), item["away"].casefold(), item["market"].casefold())))
 
     def test_group_predictions_by_game_sorts_groups_by_top_prediction(self):
         predictions = [
@@ -132,7 +132,7 @@ class AnalyzerIntegrationTests(unittest.TestCase):
         self.assertEqual(list(grouped), ["C - D", "A - B"])
         self.assertEqual(len(grouped["A - B"]), 2)
 
-    def test_prediction_threshold_filters_before_top_n_and_reports_exclusions(self):
+    def test_prediction_threshold_filters_and_reports_exclusions(self):
         data = {
             "Home FC - Away FC": {
                 "general": [
@@ -142,11 +142,10 @@ class AnalyzerIntegrationTests(unittest.TestCase):
             }
         }
         analyzer = Analyzer(data)
-        unfiltered = analyzer.analyze(top_n=1)
+        unfiltered = analyzer.analyze()
 
         filtered = analyzer.analyze(
-            top_n=20,
-            prediction_threshold=unfiltered[0]["prediction"] + 1,
+            prediction_threshold=max(item["prediction"] for item in unfiltered) + 1,
         )
 
         self.assertEqual(filtered, [])

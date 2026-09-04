@@ -16,7 +16,6 @@ date = "tomorrow"
 output_dir = "artifacts"
 
 [analysis]
-top_n = 7
 prediction_threshold = 120.5
 enabled_markets = ["goals_ou", "btts", "wins"]
 
@@ -41,7 +40,6 @@ request_max_retries = 4
             config = load_config(path)
 
         self.assertEqual(config.date, "tomorrow")
-        self.assertEqual(config.top_n, 7)
         self.assertEqual(config.prediction_threshold, 120.5)
         self.assertEqual(config.enabled_markets, ("goals_ou", "btts", "wins"))
         self.assertEqual(config.enabled_leagues, ("premier-league", "laliga"))

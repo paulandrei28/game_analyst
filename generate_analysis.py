@@ -25,24 +25,16 @@ class AnalysisGenerator:
     def generate(
         self,
         data: dict[str, dict[str, Any]],
-        top_n: int = 20,
         prediction_threshold: float | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
-        """Run the analyzer and return flat and grouped results."""
-        predictions = self.analyzer.analyze(
-            data,
-            top_n=top_n,
-            prediction_threshold=prediction_threshold,
-        )
-        grouped = self.analyzer.group_predictions_by_game(predictions)
-        return predictions, grouped
+    ) -> list[dict[str, Any]]:
+        """Run the analyzer and return its complete, flat result set."""
+        return self.analyzer.analyze(data, prediction_threshold=prediction_threshold)
 
     def generate_from_file(
         self,
         input_path: str | Path,
-        top_n: int = 20,
         prediction_threshold: float | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]]:
         """Load a team-streak JSON file and analyze it."""
         path = Path(input_path)
         LOGGER.info("Reading input file: %s", path)
@@ -55,13 +47,9 @@ class AnalysisGenerator:
             raise
 
         LOGGER.info("Loaded %d matches", len(data))
-        predictions, grouped = self.generate(
-            data,
-            top_n=top_n,
-            prediction_threshold=prediction_threshold,
-        )
+        predictions = self.generate(data, prediction_threshold=prediction_threshold)
         LOGGER.info("Generated %d predictions", len(predictions))
-        return predictions, grouped
+        return predictions
 
     @staticmethod
     def output_date(input_path: str | Path) -> str:
@@ -70,16 +58,30 @@ class AnalysisGenerator:
         date_match = re.search(r"(\d{8})(?=\.json$)", name)
         return date_match.group(1) if date_match else datetime.now().strftime("%Y%m%d")
 
-    def save_json(
+    def build_payload(
         self,
-        grouped_predictions: dict[str, list[dict[str, Any]]],
-        output_path: str | Path,
-    ) -> Path:
-        """Persist grouped predictions as the existing JSON format."""
+        *,
+        date: str,
+        predictions: list[dict[str, Any]],
+        fixture_metadata: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Attach league metadata and construct the canonical web payload."""
+        enriched: list[dict[str, Any]] = []
+        for prediction in predictions:
+            game = f"{prediction['home']} - {prediction['away']}"
+            league = fixture_metadata.get(game)
+            if league is None:
+                LOGGER.warning("Missing league metadata for %s; using Unknown", game)
+                league = {"id": None, "name": "Unknown"}
+            enriched.append({**prediction, "league": {"id": league.get("id"), "name": league.get("name") or "Unknown"}})
+        return {"date": date, "predictions": enriched}
+
+    def save_json(self, payload: dict[str, Any], output_path: str | Path) -> Path:
+        """Persist the canonical flat analysis payload."""
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            json.dumps(grouped_predictions, indent=4),
+            json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         LOGGER.info("Analysis written to %s", path)

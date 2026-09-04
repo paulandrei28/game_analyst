@@ -10,9 +10,9 @@ A small football match-analysis pipeline built around API-Football and Sofascore
 2. If the cache is missing or invalid, load the selected date's fixtures from `output/fixtures/` or API-Football.
 3. Fetch each match's team streaks through `sofascore_wrapper` and save them as JSON.
 4. Analyze the streak data with the scoring logic in `analyzer.py`.
-5. Save grouped predictions as JSON and render a Markdown report.
+5. Save a complete flat, score-ordered web payload and render a Markdown report.
 
-When the selected date's streak file already exists and contains valid JSON, steps 2 and 3 are skipped. Fixture lists are cached as newline-separated text files, which avoids repeating API-Football requests.
+When the selected date's streak file already exists and contains valid JSON, steps 2 and 3 are skipped. Streak caches retain their original game-to-statistics JSON format. Fixture lists are still cached as newline-separated text files, while a date-specific JSON fixture-metadata cache records each game's league ID and name for publishing.
 
 ## Project layout
 
@@ -22,7 +22,7 @@ When the selected date's streak file already exists and contains valid JSON, ste
 - `analyzer.py` - evidence extraction, candidate scoring, relationships, and ranking.
 - `generate_analysis.py` - application wrapper for analysis and JSON persistence.
 - `report_generator.py` - Markdown report rendering and persistence.
-- `output/fixtures/` - cached newline-separated fixture lists.
+- `output/fixtures/` - legacy fixture lists plus date-specific fixture metadata caches.
 - `output/team_streaks/` - cached daily streak input files.
 - `output/analysis/` and `output/report/` - generated prediction JSON and Markdown reports.
 
@@ -89,7 +89,6 @@ Useful options:
 
 ```text
 --config PATH          TOML configuration file (default: config.toml)
---top-n N              Keep the N highest-ranked predictions (default: 20)
 --date VALUE           Fetch yesterday, today, or tomorrow (default: today)
 --output-dir PATH      Store history directories below PATH
 ```
@@ -107,7 +106,6 @@ date = "today"
 output_dir = "output"
 
 [analysis]
-top_n = 20
 # prediction_threshold = 100.0
 enabled_markets = [
 	"goals_ou", "corners_ou", "cards_ou",
@@ -130,8 +128,12 @@ request_interval_seconds = 5.0
 ```
 
 `prediction_threshold` is optional. When enabled, predictions with a computed
-prediction value below it are excluded before `top_n` is applied. The report
-will say how many predictions were excluded when that reduces the result set.
+prediction value below it are excluded before ranking. All qualifying results
+are exported, ordered by score with deterministic tie-breakers and assigned a
+rank across the complete result set. The web app provides its own ranking,
+league filter, and client-side prediction threshold filter. Each analysis JSON
+file has the explicit shape `date` and a flat `predictions` list. League metadata is attached to each prediction, and
+the web app constructs its selectable league list from those predictions.
 `enabled_markets` controls which supported market categories can appear in the
 final ranking. Comment out entries in the TOML array to disable them. The three
 `*_ou` categories include all available over/under thresholds for goals, corners,
@@ -142,13 +144,13 @@ Pass another file with `--config PATH` when maintaining multiple configurations.
 For example:
 
 ```powershell
-python -m game_analyst --date tomorrow --top-n 10
+python -m game_analyst --date tomorrow
 ```
 
 After installing the project, the equivalent console command is:
 
 ```powershell
-game-analyst --date tomorrow --top-n 10
+game-analyst --date tomorrow
 ```
 
 The default run creates:

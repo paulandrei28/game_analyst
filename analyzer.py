@@ -1407,10 +1407,9 @@ class Analyzer:
     def analyze(
         self,
         data: dict[str, dict[str, Any]] | None = None,
-        top_n: int = 10,
         prediction_threshold: float | None = None,
     ) -> list[dict[str, Any]]:
-        """Analyze all matches and return the highest-ranked candidates."""
+        """Analyze all matches and return every qualifying candidate."""
         if prediction_threshold is not None and prediction_threshold < 0:
             raise ValueError("prediction_threshold must be non-negative")
 
@@ -1462,19 +1461,25 @@ class Analyzer:
                     }
                 )
 
-        results.sort(
-            key=lambda item: (item["prediction"], item["score"], item["confidence"]),
-            reverse=True,
-        )
         if prediction_threshold is not None:
             eligible_results = [
                 item for item in results if item["prediction"] >= prediction_threshold
             ]
             self.threshold_excluded_count = len(results) - len(eligible_results)
             results = eligible_results
-        for rank, prediction in enumerate(results[:top_n], start=1):
+        results.sort(
+            key=lambda item: (
+                -item["score"],
+                -item["prediction"],
+                -item["confidence"],
+                item["home"].casefold(),
+                item["away"].casefold(),
+                item["market"].casefold(),
+            )
+        )
+        for rank, prediction in enumerate(results, start=1):
             prediction["rank"] = rank
-        return results[:top_n]
+        return results
 
     @staticmethod
     def group_predictions_by_game(
@@ -1487,6 +1492,10 @@ class Analyzer:
             grouped.setdefault(game, []).append(prediction)
         return dict(
             sorted(
-                grouped.items(), key=lambda item: item[1][0]["prediction"], reverse=True
+                grouped.items(),
+                key=lambda item: (
+                    -item[1][0].get("score", item[1][0].get("prediction", 0)),
+                    item[0].casefold(),
+                ),
             )
         )

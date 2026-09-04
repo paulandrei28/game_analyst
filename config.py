@@ -34,7 +34,6 @@ SUPPORTED_MARKETS = (
 @dataclass(frozen=True)
 class AppConfig:
     date: str = "today"
-    top_n: int = 20
     prediction_threshold: float | None = None
     enabled_markets: tuple[str, ...] = SUPPORTED_MARKETS
     output_dir: Path = DEFAULT_OUTPUT_DIR
@@ -81,10 +80,6 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
             f"Unknown league names in config: {', '.join(unknown_leagues)}"
         )
 
-    top_n = int(analysis.get("top_n", 20))
-    if top_n < 1:
-        raise ValueError("analysis.top_n must be at least 1")
-
     threshold_value = analysis.get("prediction_threshold")
     prediction_threshold = None if threshold_value is None else float(threshold_value)
     if prediction_threshold is not None and prediction_threshold < 0:
@@ -124,7 +119,6 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
 
     return AppConfig(
         date=str(pipeline.get("date", "today")),
-        top_n=top_n,
         prediction_threshold=prediction_threshold,
         enabled_markets=enabled_markets,
         output_dir=output_dir,
