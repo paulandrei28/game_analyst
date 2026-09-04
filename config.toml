@@ -65,9 +65,9 @@ superliga = 283
 
 # England
 premier-league = 39
-fa-cup = 45
+# fa-cup = 45
 # championship = 40
-efl-cup = 48
+# efl-cup = 48
 
 # Spain
 laliga = 140
@@ -110,9 +110,9 @@ pro-league = 144
 super-lig = 203
 
 [sofascore]
-request_interval_seconds = 2.0
-request_jitter_seconds = 1.0
+request_interval_seconds = 4.0
+request_jitter_seconds = 2.0
 request_burst_size = 5
-request_burst_pause_seconds = 10.0
+request_burst_pause_seconds = 30.0
 request_backoff_base_seconds = 30.0
 request_max_retries = 2

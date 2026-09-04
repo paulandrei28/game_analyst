@@ -100,6 +100,38 @@ class FixturesScraperTests(unittest.TestCase):
             self.assertEqual(fixtures, ["A - B"])
             self.assertEqual(path.read_text(encoding="utf-8"), "A - B\n")
 
+    def test_load_or_fetch_fixtures_does_not_write_empty_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(
+                fixtures_scraper,
+                "resolve_date",
+                return_value=date(2026, 8, 25),
+            ), patch.object(
+                fixtures_scraper, "get_filtered_matches", return_value=[]
+            ):
+                with self.assertRaisesRegex(RuntimeError, "No fixtures found"):
+                    fixtures_scraper.load_or_fetch_fixtures(
+                        output_dir=directory,
+                        api_key="key",
+                    )
+
+            self.assertFalse(
+                (Path(directory) / "fixtures/fixtures_20260825.txt").exists()
+            )
+
+    def test_load_or_fetch_fixtures_removes_empty_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixtures/fixtures_20260825.txt"
+            path.parent.mkdir()
+            path.write_text("\n", encoding="utf-8")
+            with patch.object(
+                fixtures_scraper, "resolve_date", return_value=date(2026, 8, 25)
+            ):
+                with self.assertRaisesRegex(RuntimeError, "No fixtures found"):
+                    fixtures_scraper.load_or_fetch_fixtures(output_dir=directory)
+
+            self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

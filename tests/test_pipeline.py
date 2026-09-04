@@ -20,6 +20,11 @@ class PipelineTests(unittest.TestCase):
             path.write_text("[]", encoding="utf-8")
             self.assertIsNone(pipeline._load_cached_streaks(path))
 
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "No team streaks found"):
+                pipeline._load_cached_streaks(path)
+            self.assertFalse(path.exists())
+
             path.write_text('{"A - B": {}}', encoding="utf-8")
             self.assertEqual(pipeline._load_cached_streaks(path), {"A - B": {}})
 
@@ -70,6 +75,58 @@ class PipelineTests(unittest.TestCase):
     def test_run_pipeline_rejects_non_positive_top_n(self):
         with self.assertRaisesRegex(ValueError, "top_n must be at least 1"):
             asyncio.run(pipeline.run_pipeline(top_n=0))
+
+    def test_run_pipeline_stops_before_streaks_when_fixtures_are_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.object(
+                    pipeline,
+                    "resolve_date",
+                    return_value=__import__("datetime").date(2026, 8, 25),
+                ),
+                patch.object(
+                    pipeline,
+                    "load_or_fetch_fixtures",
+                    return_value=([], Path(directory) / "fixtures.txt"),
+                ),
+                patch.object(
+                    pipeline, "fetch_team_streaks", new_callable=AsyncMock
+                ) as fetch,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "No fixtures found"):
+                    asyncio.run(pipeline.run_pipeline(output_dir=directory))
+
+            fetch.assert_not_awaited()
+            self.assertEqual(list(Path(directory).rglob("*.json")), [])
+            self.assertEqual(list(Path(directory).rglob("*.md")), [])
+
+    def test_run_pipeline_stops_before_analysis_when_streaks_are_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.object(
+                    pipeline,
+                    "resolve_date",
+                    return_value=__import__("datetime").date(2026, 8, 25),
+                ),
+                patch.object(
+                    pipeline,
+                    "load_or_fetch_fixtures",
+                    return_value=(
+                        ["A - B"],
+                        Path(directory) / "fixtures/fixtures_20260825.txt",
+                    ),
+                ),
+                patch.object(
+                    pipeline, "fetch_team_streaks", new_callable=AsyncMock
+                ) as fetch,
+            ):
+                fetch.return_value = {}
+                with self.assertRaisesRegex(RuntimeError, "No team streaks found"):
+                    asyncio.run(pipeline.run_pipeline(output_dir=directory))
+
+            fetch.assert_awaited_once()
+            self.assertEqual(list(Path(directory).rglob("*.json")), [])
+            self.assertEqual(list(Path(directory).rglob("*.md")), [])
 
     def test_run_pipeline_loads_default_config_when_not_supplied(self):
         config = Mock()

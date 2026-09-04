@@ -1,12 +1,25 @@
 import asyncio
 import logging
 import random
+import re
 
 from sofascore_wrapper.api import SofascoreAPI
 from sofascore_wrapper.search import Search
 from sofascore_wrapper.match import Match
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _get_status_code(exc: Exception) -> int | None:
+    status_code = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    if status_code is not None:
+        try:
+            return int(status_code)
+        except (TypeError, ValueError):
+            pass
+
+    match = re.search(r"\b(403|429)\b", str(exc))
+    return int(match.group(1)) if match else None
 
 _BROWSER_USER_AGENTS = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -122,9 +135,7 @@ async def _call_with_backoff(
         except (
             Exception
         ) as exc:  # pragma: no cover - library may surface rate-limit errors differently
-            status_code = getattr(exc, "status", None) or getattr(
-                exc, "status_code", None
-            )
+            status_code = _get_status_code(exc)
             if status_code not in {429, 403}:
                 raise
             if attempt >= request_max_retries:

@@ -107,6 +107,28 @@ class TeamStreaksTests(unittest.TestCase):
         self.assertEqual(result, {})
         api.close.assert_awaited_once_with()
 
+    def test_call_with_backoff_retries_wrapper_string_rate_limit_error(self):
+        action = AsyncMock(
+            side_effect=[Exception("Failed to fetch /search/events: 403"), {"ok": True}]
+        )
+
+        with patch.object(team_streaks.asyncio, "sleep", new_callable=AsyncMock):
+            result = asyncio.run(
+                team_streaks._call_with_backoff(
+                    action,
+                    request_interval=0,
+                    request_jitter=0,
+                    request_count=1,
+                    request_burst_size=5,
+                    request_burst_pause=0,
+                    request_backoff_base=1,
+                    request_max_retries=1,
+                )
+            )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(action.await_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

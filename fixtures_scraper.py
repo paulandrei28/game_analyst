@@ -113,6 +113,11 @@ def load_or_fetch_fixtures(
         fixtures = [
             line for line in path.read_text(encoding="utf-8").splitlines() if line
         ]
+        if not fixtures:
+            path.unlink()
+            LOGGER.error("Empty fixture cache removed: %s", path)
+            raise RuntimeError(f"No fixtures found for {date_option}")
+
         LOGGER.info("Using cached fixtures from %s", path)
         return fixtures, path
 
@@ -124,8 +129,12 @@ def load_or_fetch_fixtures(
             api_timeout_seconds=api_timeout_seconds,
         )
     )
+    if not fixtures:
+        LOGGER.error("No fixtures found for %s; stopping before writing a cache", date_option)
+        raise RuntimeError(f"No fixtures found for {date_option}")
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(fixtures) + ("\n" if fixtures else ""), encoding="utf-8")
+    path.write_text("\n".join(fixtures) + "\n", encoding="utf-8")
     LOGGER.info("Fixtures written to %s", path)
     return fixtures, path
 

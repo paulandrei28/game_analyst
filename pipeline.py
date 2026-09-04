@@ -60,6 +60,8 @@ async def run_pipeline(
             api_timeout_seconds=settings.api_timeout_seconds,
         )
         LOGGER.info("Scraper returned %d games", len(games))
+        if not games:
+            raise RuntimeError("No fixtures found; stopping the pipeline")
 
         LOGGER.info("Fetching team streaks")
         streaks = await fetch_team_streaks(
@@ -71,6 +73,9 @@ async def run_pipeline(
             request_backoff_base=settings.sofascore_request_backoff_base_seconds,
             request_max_retries=settings.sofascore_request_max_retries,
         )
+        if not streaks:
+            raise RuntimeError("No team streaks found; stopping the pipeline")
+
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
     else:
@@ -124,6 +129,10 @@ def _load_cached_streaks(path: Path) -> dict | None:
     if not isinstance(data, dict):
         LOGGER.warning("Ignoring invalid team streak cache: %s", path)
         return None
+    if not data:
+        path.unlink()
+        LOGGER.error("Empty team streak cache removed: %s", path)
+        raise RuntimeError("No team streaks found; stopping the pipeline")
     return data
 
 
