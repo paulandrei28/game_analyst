@@ -51,6 +51,3 @@ Thumbs.db
 
 # Generated analysis history
 output/*
-!output/report/
-!output/report/**
-

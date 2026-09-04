@@ -77,46 +77,6 @@ def main():
         logger.info("Exporting reports to %s", BETMAN_DIR)
         export_reports(PROJECT_DIR / "output", BETMAN_DIR)
 
-        logger.info("Running git add .")
-
-        _run_logged(
-            ["git", "add", "."],
-            cwd=PROJECT_DIR,
-        )
-
-        logger.info("Running git commit -m 'nightly results'")
-
-        commit = _run_logged(
-            ["git", "commit", "-m", "nightly results"],
-            cwd=PROJECT_DIR,
-            check=False,
-        )
-
-        if commit.returncode == 0:
-            logger.info("Git commit created successfully.")
-            logger.info(commit.stdout.strip())
-        else:
-            # git commit returns 1 when there is nothing to commit.
-            if "nothing to commit" in commit.stdout.lower():
-                logger.info("Nothing to commit.")
-            else:
-                logger.error("Git commit failed.")
-                logger.error(commit.stdout.strip())
-                logger.error(commit.stderr.strip())
-                raise subprocess.CalledProcessError(
-                    commit.returncode,
-                    commit.args,
-                    output=commit.stdout,
-                    stderr=commit.stderr,
-                )
-
-        logger.info("Running git push origin main.")
-
-        _run_logged(
-            ["git", "push", "origin", "main"],
-            cwd=PROJECT_DIR,
-        )
-
         _publish_pages_repository()
         logger.info("Nightly results and Pages site pushed successfully.")
 
