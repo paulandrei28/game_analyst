@@ -54,6 +54,54 @@ def _run_logged(
         )
     return result
 
+def _put_pc_to_sleep():
+
+    subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "[System.Windows.Forms.Application]::SetSuspendState("
+            "[System.Windows.Forms.PowerState]::Suspend,"
+            "$false,"
+            "$false"
+            ")",
+        ],
+        check=True,
+    )
+
+
+def _publish_pages_repository() -> None:
+    if not (BETMAN_DIR / ".git").is_dir():
+        raise RuntimeError(
+            f"Pages repository was not found at {BETMAN_DIR}. "
+            "Place the betman checkout beside game_analyst."
+        )
+
+    _run_logged(["git", "add", "data"], cwd=BETMAN_DIR)
+    commit = _run_logged(
+        ["git", "commit", "-m", "daily report update"],
+        cwd=BETMAN_DIR,
+        check=False,
+    )
+    if commit.returncode not in (0, 1):
+        raise subprocess.CalledProcessError(
+            commit.returncode,
+            commit.args,
+            output=commit.stdout,
+            stderr=commit.stderr,
+        )
+    if commit.returncode == 1 and "nothing to commit" not in commit.stdout.lower():
+        raise subprocess.CalledProcessError(
+            commit.returncode,
+            commit.args,
+            output=commit.stdout,
+            stderr=commit.stderr,
+        )
+
+    _run_logged(["git", "push", "origin", "main"], cwd=BETMAN_DIR)
+
 
 def main():
     logger.info("Nightly runner started; waiting 10 minutes for system connections.")
@@ -93,37 +141,7 @@ def main():
 
     finally:
         logger.info("Nightly runner finished.")
-
-
-def _publish_pages_repository() -> None:
-    if not (BETMAN_DIR / ".git").is_dir():
-        raise RuntimeError(
-            f"Pages repository was not found at {BETMAN_DIR}. "
-            "Place the betman checkout beside game_analyst."
-        )
-
-    _run_logged(["git", "add", "data"], cwd=BETMAN_DIR)
-    commit = _run_logged(
-        ["git", "commit", "-m", "daily report update"],
-        cwd=BETMAN_DIR,
-        check=False,
-    )
-    if commit.returncode not in (0, 1):
-        raise subprocess.CalledProcessError(
-            commit.returncode,
-            commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
-        )
-    if commit.returncode == 1 and "nothing to commit" not in commit.stdout.lower():
-        raise subprocess.CalledProcessError(
-            commit.returncode,
-            commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
-        )
-
-    _run_logged(["git", "push", "origin", "main"], cwd=BETMAN_DIR)
+        _put_pc_to_sleep()
 
 
 if __name__ == "__main__":
