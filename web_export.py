@@ -10,8 +10,6 @@ ANALYSIS_PATTERN = re.compile(r"^analysis_(?P<date>\d{8})\.json$")
 def export_reports(
     output_dir: str | Path,
     destination_dir: str | Path,
-    *,
-    include_analysis: bool = True,
 ) -> list[dict[str, str]]:
     """Publish formatted daily analysis JSON and write the Pages index."""
     source_root = Path(output_dir)
@@ -35,8 +33,6 @@ def export_reports(
         report_date = match.group("date")
         report_name = f"{report_date}.json"
         data = json.loads(source_path.read_text(encoding="utf-8"))
-        # Current analysis artifacts are already complete web payloads.  Keep
-        # older grouped artifacts readable by wrapping them as before.
         payload = (
             data
             if isinstance(data, dict) and {"date", "predictions"} <= set(data)
@@ -70,7 +66,6 @@ def archive_oldest_report(destination_dir: str | Path) -> dict[str, str] | None:
     """Move the oldest report out of data/reports into data/archive and
     drop it from reports.json so the site only lists live reports."""
     destination_root = Path(destination_dir)
-    destination_reports = destination_root / "data" / "reports"
     destination_archive = destination_root / "data" / "archive"
     index_path = destination_root / "data" / "reports.json"
 

@@ -106,7 +106,7 @@ def metadata_cache_path(output_dir: str | Path, target_date: date) -> Path:
 
 def fixture_metadata(matches: list[dict]) -> dict[str, dict[str, int | str | None]]:
     """Map a formatted game name to the league information returned by the API."""
-    metadata: dict[str, dict[str, int | str]] = {}
+    metadata: dict[str, dict[str, int | str | None]] = {}
     for match in matches:
         home = match.get("teams", {}).get("home", {}).get("name")
         away = match.get("teams", {}).get("away", {}).get("name")
