@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from web_export import export_reports
+from web_export import archive_oldest_report, export_reports
 
 PROJECT_DIR = Path(__file__).resolve().parent
 BETMAN_DIR = PROJECT_DIR.parent / "betman"
@@ -124,6 +124,7 @@ def main():
 
         logger.info("Exporting reports to %s", BETMAN_DIR)
         export_reports(PROJECT_DIR / "output", BETMAN_DIR)
+        archive_oldest_report(BETMAN_DIR)
 
         _publish_pages_repository()
         logger.info("Nightly results and Pages site pushed successfully.")

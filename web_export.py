@@ -64,3 +64,36 @@ def export_reports(
     )
     temporary_index.replace(index_path)
     return entries
+
+
+def archive_oldest_report(destination_dir: str | Path) -> dict[str, str] | None:
+    """Move the oldest report out of data/reports into data/archive and
+    drop it from reports.json so the site only lists live reports."""
+    destination_root = Path(destination_dir)
+    destination_reports = destination_root / "data" / "reports"
+    destination_archive = destination_root / "data" / "archive"
+    index_path = destination_root / "data" / "reports.json"
+
+    if not index_path.is_file():
+        return None
+
+    index_data = json.loads(index_path.read_text(encoding="utf-8"))
+    entries: list[dict[str, str]] = index_data.get("reports", [])
+    if not entries:
+        return None
+
+    oldest_entry = min(entries, key=lambda entry: entry["date"])
+    report_path = destination_root / oldest_entry["report"]
+    if report_path.is_file():
+        destination_archive.mkdir(parents=True, exist_ok=True)
+        report_path.replace(destination_archive / report_path.name)
+
+    remaining_entries = [entry for entry in entries if entry is not oldest_entry]
+    temporary_index = index_path.with_suffix(".json.tmp")
+    temporary_index.write_text(
+        json.dumps({"reports": remaining_entries}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary_index.replace(index_path)
+
+    return oldest_entry
