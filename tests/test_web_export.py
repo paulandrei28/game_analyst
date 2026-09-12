@@ -7,7 +7,7 @@ from web_export import export_reports
 
 
 class WebExportTests(unittest.TestCase):
-    def test_export_reports_copies_files_and_orders_newest_first(self):
+    def test_export_reports_only_publishes_the_newest_report(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             analysis_dir = root / "output" / "analysis"
@@ -22,9 +22,7 @@ class WebExportTests(unittest.TestCase):
             destination = root / "site"
             entries = export_reports(root / "output", destination)
 
-            self.assertEqual(
-                [entry["date"] for entry in entries], ["20260904", "20260902"]
-            )
+            self.assertEqual([entry["date"] for entry in entries], ["20260904"])
             self.assertEqual(
                 json.loads((destination / "data" / "reports.json").read_text()),
                 {"reports": entries},
@@ -34,6 +32,36 @@ class WebExportTests(unittest.TestCase):
                     (destination / "data" / "reports" / "20260904.json").read_text()
                 ),
                 {"date": "20260904", "predictions": []},
+            )
+            self.assertFalse(
+                (destination / "data" / "reports" / "20260902.json").exists()
+            )
+
+    def test_export_reports_accumulates_across_runs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            analysis_dir = root / "output" / "analysis"
+            analysis_dir.mkdir(parents=True)
+            destination = root / "site"
+
+            (analysis_dir / "analysis_20260902.json").write_text(
+                '{"date":"20260902","predictions":[]}', encoding="utf-8"
+            )
+            export_reports(root / "output", destination)
+
+            (analysis_dir / "analysis_20260904.json").write_text(
+                '{"date":"20260904","predictions":[]}', encoding="utf-8"
+            )
+            entries = export_reports(root / "output", destination)
+
+            self.assertEqual(
+                [entry["date"] for entry in entries], ["20260904", "20260902"]
+            )
+            self.assertTrue(
+                (destination / "data" / "reports" / "20260902.json").is_file()
+            )
+            self.assertTrue(
+                (destination / "data" / "reports" / "20260904.json").is_file()
             )
 
     def test_export_reports_wraps_legacy_grouped_payload_for_compatibility(self):

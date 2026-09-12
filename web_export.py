@@ -11,32 +11,43 @@ def export_reports(
     output_dir: str | Path,
     destination_dir: str | Path,
 ) -> list[dict[str, str]]:
-    """Publish formatted daily analysis JSON and write the Pages index."""
+    """Publish the newest analysis JSON and update the Pages index.
+
+    Only the most recently generated report is copied; older reports already
+    published in a previous run are left untouched (see archive_oldest_report
+    for trimming the accumulated history).
+    """
     source_root = Path(output_dir)
     destination_root = Path(destination_dir)
     source_analysis = source_root / "analysis"
     destination_reports = destination_root / "data" / "reports"
-    destination_analysis = destination_root / "data" / "analysis"
     destination_reports.mkdir(parents=True, exist_ok=True)
 
-    for stale_report in destination_reports.glob("*.md"):
-        stale_report.unlink()
-    if destination_analysis.is_dir():
-        for stale_analysis in destination_analysis.glob("*.json"):
-            stale_analysis.unlink()
-
+    index_path = destination_root / "data" / "reports.json"
     entries: list[dict[str, str]] = []
-    for source_path in sorted(source_analysis.glob("analysis_*.json")):
+    if index_path.is_file():
+        entries = json.loads(index_path.read_text(encoding="utf-8")).get(
+            "reports", []
+        )
+
+    latest_path: Path | None = None
+    latest_date: str | None = None
+    for source_path in source_analysis.glob("analysis_*.json"):
         match = ANALYSIS_PATTERN.match(source_path.name)
         if not match:
             continue
         report_date = match.group("date")
-        report_name = f"{report_date}.json"
-        data = json.loads(source_path.read_text(encoding="utf-8"))
+        if latest_date is None or report_date > latest_date:
+            latest_date = report_date
+            latest_path = source_path
+
+    if latest_path is not None and latest_date is not None:
+        report_name = f"{latest_date}.json"
+        data = json.loads(latest_path.read_text(encoding="utf-8"))
         payload = (
             data
             if isinstance(data, dict) and {"date", "predictions"} <= set(data)
-            else {"date": report_date, "predictions": data}
+            else {"date": latest_date, "predictions": data}
         )
         destination_path = destination_reports / report_name
         destination_path.write_text(
@@ -44,14 +55,12 @@ def export_reports(
             + "\n",
             encoding="utf-8",
         )
-        entry = {
-            "date": report_date,
-            "report": f"data/reports/{report_name}",
-        }
-        entries.append(entry)
+        entries = [entry for entry in entries if entry["date"] != latest_date]
+        entries.append(
+            {"date": latest_date, "report": f"data/reports/{report_name}"}
+        )
 
     entries.sort(key=lambda entry: entry["date"], reverse=True)
-    index_path = destination_root / "data" / "reports.json"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_index = index_path.with_suffix(".json.tmp")
     temporary_index.write_text(
