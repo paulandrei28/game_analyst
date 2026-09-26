@@ -59,13 +59,14 @@ async def run_pipeline(
         )
         LOGGER.info("Fixture metadata contains %d games", len(games))
         LOGGER.info(
-            "No valid team streak cache for %s; collecting fresh data", date_option
+            "No valid team streak cache for %s; collecting fresh data",
+            date_option,
         )
         LOGGER.info("Scraper returned %d games", len(games))
         if not games:
             raise RuntimeError("No fixtures found; stopping the pipeline")
 
-        LOGGER.info("Fetching team streaks")
+        LOGGER.info("Fetching team streaks from SofaScore")
         streaks = await fetch_team_streaks(
             games,
             request_interval=settings.sofascore_request_interval_seconds,
@@ -77,7 +78,6 @@ async def run_pipeline(
         )
         if not streaks:
             raise RuntimeError("No team streaks found; stopping the pipeline")
-
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
     else:
@@ -93,7 +93,10 @@ async def run_pipeline(
             # A historical streak file is still publishable when its separate
             # metadata cache cannot be reconstructed. Predictions get the
             # explicit Unknown marker in build_payload.
-            LOGGER.warning("Fixture metadata unavailable; publishing Unknown leagues", exc_info=True)
+            LOGGER.warning(
+                "Fixture metadata unavailable; publishing Unknown leagues",
+                exc_info=True,
+            )
             fixture_metadata = {}
 
     generator = AnalysisGenerator(enabled_markets=settings.enabled_markets)
@@ -120,13 +123,13 @@ async def run_pipeline(
             f"Prediction threshold {prediction_threshold:.2f} excluded "
             f"{excluded_count} prediction(s); only {len(predictions)} met the threshold."
         )
+
     report_generator.save(
         predictions,
         str(report_path),
         title=f"Match Analysis Report - {output_date}",
         threshold_notice=threshold_notice,
     )
-
     return {
         "streaks": streaks_path,
         "analysis": analysis_path,
@@ -148,10 +151,12 @@ def _load_cached_streaks(path: Path) -> dict | None:
     if not isinstance(data, dict):
         LOGGER.warning("Ignoring invalid team streak cache: %s", path)
         return None
+
     if not data:
         path.unlink()
         LOGGER.error("Empty team streak cache removed: %s", path)
         raise RuntimeError("No team streaks found; stopping the pipeline")
+
     return data
 
 
@@ -190,15 +195,20 @@ def main() -> None:
             run_pipeline(
                 date_option=args.date or settings.date,
                 output_dir=(
-                    settings.output_dir if args.output_dir is None else args.output_dir
+                    args.output_dir
+                    if args.output_dir is not None
+                    else settings.output_dir
                 ),
-                prediction_threshold=settings.prediction_threshold,
                 config=settings,
             )
         )
     except Exception:
-        LOGGER.exception("Analysis pipeline failed")
-        raise SystemExit(1)
+        LOGGER.exception("Pipeline failed")
+        raise
 
-    for artifact_type, path in artifacts.items():
-        LOGGER.info("%s: %s", artifact_type.capitalize(), path)
+    for name, path in artifacts.items():
+        LOGGER.info("%s: %s", name, path)
+
+
+if __name__ == "__main__":
+    main()

@@ -117,8 +117,24 @@ class AnalyzerIntegrationTests(unittest.TestCase):
 
         self.assertGreaterEqual(len(predictions), 2)
         self.assertEqual(predictions[0]["rank"], 1)
-        self.assertEqual([prediction["rank"] for prediction in predictions], list(range(1, len(predictions) + 1)))
-        self.assertEqual(predictions, sorted(predictions, key=lambda item: (-item["score"], -item["prediction"], -item["confidence"], item["home"].casefold(), item["away"].casefold(), item["market"].casefold())))
+        self.assertEqual(
+            [prediction["rank"] for prediction in predictions],
+            list(range(1, len(predictions) + 1)),
+        )
+        self.assertEqual(
+            predictions,
+            sorted(
+                predictions,
+                key=lambda item: (
+                    -item["score"],
+                    -item["prediction"],
+                    -item["confidence"],
+                    item["home"].casefold(),
+                    item["away"].casefold(),
+                    item["market"].casefold(),
+                ),
+            ),
+        )
 
     def test_group_predictions_by_game_sorts_groups_by_top_prediction(self):
         predictions = [

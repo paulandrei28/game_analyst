@@ -54,6 +54,7 @@ def _run_logged(
         )
     return result
 
+
 def _put_pc_to_sleep():
 
     subprocess.run(

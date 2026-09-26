@@ -155,11 +155,16 @@ def load_or_fetch_fixtures_with_metadata(
     )
     metadata = fixture_metadata(matches)
     if not metadata:
-        LOGGER.error("No fixtures found for %s; stopping before writing a cache", date_option)
+        LOGGER.error(
+            "No fixtures found for %s; stopping before writing a cache", date_option
+        )
         raise RuntimeError(f"No fixtures found for {date_option}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"fixtures": metadata}, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps({"fixtures": metadata}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     LOGGER.info("Fixture metadata written to %s", path)
     return list(metadata), metadata, path
 
@@ -196,7 +201,9 @@ def load_or_fetch_fixtures(
         )
     )
     if not fixtures:
-        LOGGER.error("No fixtures found for %s; stopping before writing a cache", date_option)
+        LOGGER.error(
+            "No fixtures found for %s; stopping before writing a cache", date_option
+        )
         raise RuntimeError(f"No fixtures found for {date_option}")
 
     path.parent.mkdir(parents=True, exist_ok=True)

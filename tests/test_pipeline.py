@@ -59,22 +59,29 @@ class PipelineTests(unittest.TestCase):
                 patch.object(
                     pipeline,
                     "load_or_fetch_fixtures_with_metadata",
-                    return_value=(["A - B"], {"A - B": {"id": 39, "name": "Premier League"}}, Path(directory) / "fixtures/fixtures_20260825.json"),
+                    return_value=(
+                        ["A - B"],
+                        {"A - B": {"id": 39, "name": "Premier League"}},
+                        Path(directory) / "fixtures/fixtures_20260825.json",
+                    ),
                 ),
                 patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
             ):
-                artifacts = asyncio.run(
-                    pipeline.run_pipeline(output_dir=directory)
-                )
+                artifacts = asyncio.run(pipeline.run_pipeline(output_dir=directory))
 
             fetch.assert_not_awaited()
             generator.generate.assert_called_once_with(
                 {"A - B": {}}, prediction_threshold=None
             )
             generator.save_json.assert_called_once_with(payload, artifacts["analysis"])
-            self.assertEqual(generator.build_payload.call_args.kwargs["fixture_metadata"]["A - B"]["id"], 39)
+            self.assertEqual(
+                generator.build_payload.call_args.kwargs["fixture_metadata"]["A - B"][
+                    "id"
+                ],
+                39,
+            )
             report_generator.save.assert_called_once()
             self.assertTrue(artifacts["analysis"].parent.is_dir())
             self.assertEqual(artifacts["report"].name, "report_20260825.md")
@@ -87,7 +94,11 @@ class PipelineTests(unittest.TestCase):
                     "resolve_date",
                     return_value=__import__("datetime").date(2026, 8, 25),
                 ),
-                patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", return_value=([], {}, Path(directory) / "fixtures.json")),
+                patch.object(
+                    pipeline,
+                    "load_or_fetch_fixtures_with_metadata",
+                    return_value=([], {}, Path(directory) / "fixtures.json"),
+                ),
                 patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
@@ -107,7 +118,15 @@ class PipelineTests(unittest.TestCase):
                     "resolve_date",
                     return_value=__import__("datetime").date(2026, 8, 25),
                 ),
-                patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", return_value=(["A - B"], {"A - B": {"id": 39, "name": "Premier League"}}, Path(directory) / "fixtures/fixtures_20260825.json")),
+                patch.object(
+                    pipeline,
+                    "load_or_fetch_fixtures_with_metadata",
+                    return_value=(
+                        ["A - B"],
+                        {"A - B": {"id": 39, "name": "Premier League"}},
+                        Path(directory) / "fixtures/fixtures_20260825.json",
+                    ),
+                ),
                 patch.object(
                     pipeline, "fetch_team_streaks", new_callable=AsyncMock
                 ) as fetch,
@@ -144,12 +163,19 @@ class PipelineTests(unittest.TestCase):
                 return_value=__import__("datetime").date(2026, 8, 25),
             ),
             patch.object(pipeline, "_load_cached_streaks", return_value={}),
-            patch.object(pipeline, "load_or_fetch_fixtures_with_metadata", side_effect=RuntimeError("offline")),
+            patch.object(
+                pipeline,
+                "load_or_fetch_fixtures_with_metadata",
+                side_effect=RuntimeError("offline"),
+            ),
             patch.object(pipeline, "AnalysisGenerator") as generator_class,
             patch.object(pipeline, "HumanReadableReport"),
         ):
             generator_class.return_value.generate.return_value = []
-            generator_class.return_value.build_payload.return_value = {"date": "20260825", "predictions": []}
+            generator_class.return_value.build_payload.return_value = {
+                "date": "20260825",
+                "predictions": [],
+            }
             asyncio.run(pipeline.run_pipeline())
 
         generator_class.assert_called_once_with(enabled_markets=config.enabled_markets)

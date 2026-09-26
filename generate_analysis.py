@@ -73,7 +73,15 @@ class AnalysisGenerator:
             if league is None:
                 LOGGER.warning("Missing league metadata for %s; using Unknown", game)
                 league = {"id": None, "name": "Unknown"}
-            enriched.append({**prediction, "league": {"id": league.get("id"), "name": league.get("name") or "Unknown"}})
+            enriched.append(
+                {
+                    **prediction,
+                    "league": {
+                        "id": league.get("id"),
+                        "name": league.get("name") or "Unknown",
+                    },
+                }
+            )
         return {"date": date, "predictions": enriched}
 
     def save_json(self, payload: dict[str, Any], output_path: str | Path) -> Path:

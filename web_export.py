@@ -26,9 +26,7 @@ def export_reports(
     index_path = destination_root / "data" / "reports.json"
     entries: list[dict[str, str]] = []
     if index_path.is_file():
-        entries = json.loads(index_path.read_text(encoding="utf-8")).get(
-            "reports", []
-        )
+        entries = json.loads(index_path.read_text(encoding="utf-8")).get("reports", [])
 
     latest_path: Path | None = None
     latest_date: str | None = None
@@ -51,14 +49,11 @@ def export_reports(
         )
         destination_path = destination_reports / report_name
         destination_path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False)
-            + "\n",
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         entries = [entry for entry in entries if entry["date"] != latest_date]
-        entries.append(
-            {"date": latest_date, "report": f"data/reports/{report_name}"}
-        )
+        entries.append({"date": latest_date, "report": f"data/reports/{report_name}"})
 
     entries.sort(key=lambda entry: entry["date"], reverse=True)
     index_path.parent.mkdir(parents=True, exist_ok=True)

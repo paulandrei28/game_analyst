@@ -69,9 +69,14 @@ class WebExportTests(unittest.TestCase):
             root = Path(directory)
             analysis_dir = root / "output" / "analysis"
             analysis_dir.mkdir(parents=True)
-            (analysis_dir / "analysis_20260904.json").write_text('{"A - B": []}', encoding="utf-8")
+            (analysis_dir / "analysis_20260904.json").write_text(
+                '{"A - B": []}', encoding="utf-8"
+            )
             export_reports(root / "output", root / "site")
-            self.assertEqual(json.loads((root / "site/data/reports/20260904.json").read_text()), {"date": "20260904", "predictions": {"A - B": []}})
+            self.assertEqual(
+                json.loads((root / "site/data/reports/20260904.json").read_text()),
+                {"date": "20260904", "predictions": {"A - B": []}},
+            )
 
     def test_export_reports_ignores_invalid_names_and_missing_analysis(self):
         with tempfile.TemporaryDirectory() as directory:

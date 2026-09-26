@@ -48,12 +48,14 @@ class AnalysisGeneratorTests(unittest.TestCase):
             fixture_metadata={"A - B": {"id": 39, "name": "Premier League"}},
         )
         self.assertEqual(payload["date"], "20260825")
-        self.assertEqual(payload["predictions"][0]["league"], {"id": 39, "name": "Premier League"})
-        self.assertEqual(payload["predictions"][1]["league"], {"id": None, "name": "Unknown"})
+        self.assertEqual(
+            payload["predictions"][0]["league"], {"id": 39, "name": "Premier League"}
+        )
+        self.assertEqual(
+            payload["predictions"][1]["league"], {"id": None, "name": "Unknown"}
+        )
         with tempfile.TemporaryDirectory() as directory:
-            output = generator.save_json(
-                payload, Path(directory) / "nested/out.json"
-            )
+            output = generator.save_json(payload, Path(directory) / "nested/out.json")
             self.assertEqual(
                 json.loads(output.read_text(encoding="utf-8")),
                 payload,
