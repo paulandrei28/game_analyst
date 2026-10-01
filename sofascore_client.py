@@ -81,7 +81,7 @@ class SofascoreSearcher:
         "#didomi-notice-agree-button",
     )
     _COOKIE_CONSENT_TEXT_PATTERN = re.compile(
-        r"accept all|accept cookies|^accept$|i agree|i accept|allow all|agree to all",
+        r"\b(accept all|accept cookies|accept|i agree|i accept|allow all|agree to all|consent|i consent)\b",
         re.IGNORECASE,
     )
     _ROBOT_CHECK_FRAME_SELECTOR = 'iframe[title*="recaptcha" i], iframe[src*="recaptcha" i]'
@@ -738,10 +738,19 @@ class SofascoreSearcher:
         return cookie_dismissed or robot_dismissed
 
     async def _dismiss_cookie_consent(self) -> bool:
-        page = self.client.page
+        # The consent dialog is sometimes rendered in the main document and
+        # sometimes inside a third-party CMP iframe, so check every frame.
+        for frame in self.client.page.frames:
+            try:
+                if await self._click_consent_button(frame):
+                    return True
+            except Exception:
+                continue
+        return False
 
+    async def _click_consent_button(self, frame) -> bool:
         for selector in self._COOKIE_CONSENT_SELECTORS:
-            locator = page.locator(selector)
+            locator = frame.locator(selector)
             try:
                 if await locator.count() == 0 or not await locator.first.is_visible():
                     continue
@@ -754,10 +763,10 @@ class SofascoreSearcher:
             except Exception:
                 continue
 
-        text_locator = page.get_by_role(
-            "button", name=self._COOKIE_CONSENT_TEXT_PATTERN
-        )
         try:
+            text_locator = frame.get_by_role(
+                "button", name=self._COOKIE_CONSENT_TEXT_PATTERN
+            )
             count = await text_locator.count()
         except Exception:
             count = 0
