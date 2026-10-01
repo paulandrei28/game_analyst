@@ -73,6 +73,19 @@ class SofascoreSearcher:
         "manager": ("/manager/",),
     }
 
+    # Known consent-management-platform selectors, checked before falling back
+    # to generic text matching.
+    _COOKIE_CONSENT_SELECTORS: tuple[str, ...] = (
+        "#onetrust-accept-btn-handler",
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "#didomi-notice-agree-button",
+    )
+    _COOKIE_CONSENT_TEXT_PATTERN = re.compile(
+        r"accept all|accept cookies|^accept$|i agree|i accept|allow all|agree to all",
+        re.IGNORECASE,
+    )
+    _ROBOT_CHECK_FRAME_SELECTOR = 'iframe[title*="recaptcha" i], iframe[src*="recaptcha" i]'
+
     def __init__(
         self,
         client: "SofascoreClient",
@@ -132,6 +145,12 @@ class SofascoreSearcher:
                 await self._ensure_search_page()
             await self._open_search()
             search_input = await self._get_search_input()
+            if search_input is None:
+                # The search control can be hidden behind a cookie banner or a
+                # bot-check prompt; dismiss those and retry once before giving up.
+                if await self._dismiss_blocking_overlays():
+                    await self._open_search()
+                    search_input = await self._get_search_input()
             if search_input is None:
                 LOGGER.warning("Could not find SofaScore search input")
                 return []
@@ -653,6 +672,7 @@ class SofascoreSearcher:
         status = response.status if response is not None else None
         if status is None or status >= 400:
             raise SofascoreHTTPError(status or 0, SOFASCORE_FOOTBALL_URL)
+        await self._dismiss_blocking_overlays()
         await self._sleep_random("Waiting for SofaScore search surface", 2.0, 4.0)
 
     async def _open_search(self) -> None:
@@ -661,6 +681,18 @@ class SofascoreSearcher:
         if await self._visible_modal() is not None:
             return
 
+        await self._dismiss_blocking_overlays()
+        if await self._click_search_button():
+            return
+
+        # Cookie/robot prompts can appear only once the page notices user
+        # interaction, so check again before giving up.
+        if await self._dismiss_blocking_overlays() and await self._click_search_button():
+            return
+
+        raise RuntimeError("Could not open SofaScore search")
+
+    async def _click_search_button(self) -> bool:
         selectors = [
             self.client.page.get_by_role(
                 "button", name=re.compile(r"search", re.IGNORECASE)
@@ -693,11 +725,72 @@ class SofascoreSearcher:
                         self.post_open_delay_max,
                     )
                     if await self._visible_modal() is not None:
-                        return
+                        return True
                 except Exception:
                     continue
 
-        raise RuntimeError("Could not open SofaScore search")
+        return False
+
+    async def _dismiss_blocking_overlays(self) -> bool:
+        """Best-effort dismissal of cookie banners and bot-check prompts."""
+        cookie_dismissed = await self._dismiss_cookie_consent()
+        robot_dismissed = await self._dismiss_robot_check()
+        return cookie_dismissed or robot_dismissed
+
+    async def _dismiss_cookie_consent(self) -> bool:
+        page = self.client.page
+
+        for selector in self._COOKIE_CONSENT_SELECTORS:
+            locator = page.locator(selector)
+            try:
+                if await locator.count() == 0 or not await locator.first.is_visible():
+                    continue
+                await locator.first.click(timeout=5_000)
+                LOGGER.info("Dismissed SofaScore cookie consent via %r", selector)
+                await self._sleep_random(
+                    "After dismissing SofaScore cookie consent", 0.5, 1.5
+                )
+                return True
+            except Exception:
+                continue
+
+        text_locator = page.get_by_role(
+            "button", name=self._COOKIE_CONSENT_TEXT_PATTERN
+        )
+        try:
+            count = await text_locator.count()
+        except Exception:
+            count = 0
+        for index in range(count):
+            candidate = text_locator.nth(index)
+            try:
+                if not await candidate.is_visible():
+                    continue
+                await candidate.click(timeout=5_000)
+                LOGGER.info("Dismissed SofaScore cookie consent via text match")
+                await self._sleep_random(
+                    "After dismissing SofaScore cookie consent", 0.5, 1.5
+                )
+                return True
+            except Exception:
+                continue
+
+        return False
+
+    async def _dismiss_robot_check(self) -> bool:
+        frame_locator = self.client.page.frame_locator(
+            self._ROBOT_CHECK_FRAME_SELECTOR
+        )
+        checkbox = frame_locator.locator('#recaptcha-anchor, [role="checkbox"]')
+        try:
+            if await checkbox.count() == 0 or not await checkbox.first.is_visible():
+                return False
+            await checkbox.first.click(timeout=5_000)
+            LOGGER.info("Clicked SofaScore 'I'm not a robot' checkbox")
+            await self._sleep_random("After SofaScore robot check", 2.0, 4.0)
+            return True
+        except Exception:
+            return False
 
     async def _get_search_input(self):
         candidates = [
