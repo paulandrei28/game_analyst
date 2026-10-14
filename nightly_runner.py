@@ -1,4 +1,5 @@
 import logging
+import json
 import subprocess
 import time
 from datetime import datetime
@@ -124,8 +125,25 @@ def main():
         logger.info("Analysis finished successfully.")
 
         logger.info("Exporting reports to %s", BETMAN_DIR)
-        export_reports(PROJECT_DIR / "output", BETMAN_DIR)
-        archive_oldest_report(BETMAN_DIR)
+        reports_index = BETMAN_DIR / "data" / "reports.json"
+        previously_published_dates = set()
+        if reports_index.is_file():
+            previous_entries = json.loads(
+                reports_index.read_text(encoding="utf-8")
+            ).get("reports", [])
+            previously_published_dates = {
+                entry["date"] for entry in previous_entries
+            }
+
+        published_entries = export_reports(PROJECT_DIR / "output", BETMAN_DIR)
+        uploaded_new_report = any(
+            entry["date"] not in previously_published_dates
+            for entry in published_entries
+        )
+        if uploaded_new_report:
+            archive_oldest_report(BETMAN_DIR)
+        else:
+            logger.info("No new report was uploaded; skipping oldest-report cleanup.")
 
         _publish_pages_repository()
         logger.info("Nightly results and Pages site pushed successfully.")

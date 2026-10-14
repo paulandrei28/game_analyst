@@ -17,6 +17,8 @@ output_dir = "artifacts"
 
 [analysis]
 prediction_threshold = 120.5
+referee_card_bonus = 7.5
+referee_card_penalty = 8.0
 enabled_markets = ["goals_ou", "btts", "wins"]
 
 [fixtures]
@@ -41,6 +43,8 @@ request_max_retries = 4
 
         self.assertEqual(config.date, "tomorrow")
         self.assertEqual(config.prediction_threshold, 120.5)
+        self.assertEqual(config.referee_card_bonus, 7.5)
+        self.assertEqual(config.referee_card_penalty, 8.0)
         self.assertEqual(config.enabled_markets, ("goals_ou", "btts", "wins"))
         self.assertEqual(config.enabled_leagues, ("premier-league", "laliga"))
         self.assertEqual(config.league_ids, {"premier-league": 39, "laliga": 140})

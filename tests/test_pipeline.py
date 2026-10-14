@@ -46,6 +46,9 @@ class PipelineTests(unittest.TestCase):
             streak_path = Path(directory) / "team_streaks/team_streaks_20260825.json"
             streak_path.parent.mkdir(parents=True)
             streak_path.write_text('{"A - B": {}}', encoding="utf-8")
+            context_path = Path(directory) / "match_context/match_context_20260825.json"
+            context_path.parent.mkdir(parents=True)
+            context_path.write_text("{}", encoding="utf-8")
             with (
                 patch.object(
                     pipeline,
@@ -66,14 +69,14 @@ class PipelineTests(unittest.TestCase):
                     ),
                 ),
                 patch.object(
-                    pipeline, "fetch_team_streaks", new_callable=AsyncMock
+                    pipeline, "fetch_team_match_data", new_callable=AsyncMock
                 ) as fetch,
             ):
                 artifacts = asyncio.run(pipeline.run_pipeline(output_dir=directory))
 
             fetch.assert_not_awaited()
             generator.generate.assert_called_once_with(
-                {"A - B": {}}, prediction_threshold=None
+                {"A - B": {}}, prediction_threshold=None, match_context={}
             )
             generator.save_json.assert_called_once_with(payload, artifacts["analysis"])
             self.assertEqual(
@@ -100,7 +103,7 @@ class PipelineTests(unittest.TestCase):
                     return_value=([], {}, Path(directory) / "fixtures.json"),
                 ),
                 patch.object(
-                    pipeline, "fetch_team_streaks", new_callable=AsyncMock
+                    pipeline, "fetch_team_match_data", new_callable=AsyncMock
                 ) as fetch,
             ):
                 with self.assertRaisesRegex(RuntimeError, "No fixtures found"):
@@ -128,10 +131,10 @@ class PipelineTests(unittest.TestCase):
                     ),
                 ),
                 patch.object(
-                    pipeline, "fetch_team_streaks", new_callable=AsyncMock
+                    pipeline, "fetch_team_match_data", new_callable=AsyncMock
                 ) as fetch,
             ):
-                fetch.return_value = {}
+                fetch.return_value = ({}, {})
                 with self.assertRaisesRegex(RuntimeError, "No team streaks found"):
                     asyncio.run(pipeline.run_pipeline(output_dir=directory))
 
@@ -144,6 +147,8 @@ class PipelineTests(unittest.TestCase):
         config.date = "today"
         config.output_dir = Path("output")
         config.prediction_threshold = None
+        config.referee_card_bonus = 5.0
+        config.referee_card_penalty = 5.0
         config.allowed_league_ids = {39}
         config.league_ids = {}
         config.enabled_markets = ()
@@ -163,6 +168,7 @@ class PipelineTests(unittest.TestCase):
                 return_value=__import__("datetime").date(2026, 8, 25),
             ),
             patch.object(pipeline, "_load_cached_streaks", return_value={}),
+            patch.object(pipeline, "_load_cached_json", return_value={}),
             patch.object(
                 pipeline,
                 "load_or_fetch_fixtures_with_metadata",
@@ -178,7 +184,11 @@ class PipelineTests(unittest.TestCase):
             }
             asyncio.run(pipeline.run_pipeline())
 
-        generator_class.assert_called_once_with(enabled_markets=config.enabled_markets)
+        generator_class.assert_called_once_with(
+            enabled_markets=config.enabled_markets,
+            referee_card_bonus=5.0,
+            referee_card_penalty=5.0,
+        )
 
 
 if __name__ == "__main__":

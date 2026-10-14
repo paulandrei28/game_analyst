@@ -19,16 +19,26 @@ class AnalysisGenerator:
         self,
         analyzer: Analyzer | None = None,
         enabled_markets: tuple[str, ...] | None = None,
+        referee_card_bonus: float = 5.0,
+        referee_card_penalty: float = 5.0,
     ):
-        self.analyzer = analyzer or Analyzer(enabled_markets=enabled_markets)
+        self.analyzer = analyzer or Analyzer(
+            enabled_markets=enabled_markets,
+            referee_card_bonus=referee_card_bonus,
+            referee_card_penalty=referee_card_penalty,
+        )
 
     def generate(
         self,
         data: dict[str, dict[str, Any]],
         prediction_threshold: float | None = None,
+        match_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Run the analyzer and return its complete, flat result set."""
-        return self.analyzer.analyze(data, prediction_threshold=prediction_threshold)
+        kwargs = {"prediction_threshold": prediction_threshold}
+        if match_context is not None:
+            kwargs["match_context"] = match_context
+        return self.analyzer.analyze(data, **kwargs)
 
     def generate_from_file(
         self,
@@ -82,7 +92,8 @@ class AnalysisGenerator:
                     },
                 }
             )
-        return {"date": date, "predictions": enriched}
+        payload = {"date": date, "predictions": enriched}
+        return payload
 
     def save_json(self, payload: dict[str, Any], output_path: str | Path) -> Path:
         """Persist the canonical flat analysis payload."""

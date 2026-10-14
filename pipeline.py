@@ -5,16 +5,19 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from .config import AppConfig, DEFAULT_CONFIG_PATH, load_config
+from .derby_matcher import DerbyMatcher
 from .generate_analysis import AnalysisGenerator
+from .match_context import build_worth_watching, qualifies_for_worth_watching
 from .report_generator import HumanReadableReport
 from .fixtures_scraper import (
     DATE_OPTIONS,
     load_or_fetch_fixtures_with_metadata,
     resolve_date,
 )
-from .team_streaks import fetch_team_streaks
+from .team_streaks import enrich_cached_team_statistics, fetch_team_match_data
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,20 +37,25 @@ async def run_pipeline(
         prediction_threshold = settings.prediction_threshold
 
     target_date = resolve_date(date_option)
+    derby_matcher = DerbyMatcher.from_file()
     output_root = Path(output_dir)
     streaks_dir = output_root / "team_streaks"
+    context_dir = output_root / "match_context"
     json_analysis_dir = output_root / "analysis"
     report_dir = output_root / "report"
     streaks_dir.mkdir(parents=True, exist_ok=True)
+    context_dir.mkdir(parents=True, exist_ok=True)
     json_analysis_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
 
     output_date = target_date.strftime("%Y%m%d")
     streaks_path = streaks_dir / f"team_streaks_{output_date}.json"
+    context_path = context_dir / f"match_context_{output_date}.json"
     analysis_path = json_analysis_dir / f"analysis_{output_date}.json"
     report_path = report_dir / f"report_{output_date}.md"
 
     streaks = _load_cached_streaks(streaks_path)
+    match_context = _load_cached_json(context_path)
     if streaks is None:
         # League metadata is cached independently so the historical streak
         # cache remains its original game-to-stats mapping.
@@ -67,19 +75,25 @@ async def run_pipeline(
             raise RuntimeError("No fixtures found; stopping the pipeline")
 
         LOGGER.info("Fetching team streaks from SofaScore")
-        streaks = await fetch_team_streaks(
+        streaks, match_context = await fetch_team_match_data(
             games,
+            target_date=target_date,
             request_interval=settings.sofascore_request_interval_seconds,
             request_jitter=settings.sofascore_request_jitter_seconds,
             request_burst_size=settings.sofascore_request_burst_size,
             request_burst_pause=settings.sofascore_request_burst_pause_seconds,
             request_backoff_base=settings.sofascore_request_backoff_base_seconds,
             request_max_retries=settings.sofascore_request_max_retries,
+            statistics_cache_dir=output_root / "sofascore_statistics",
+            worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
+                game, context, fixture_metadata, derby_matcher
+            ),
         )
         if not streaks:
             raise RuntimeError("No team streaks found; stopping the pipeline")
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
+        _save_json(match_context, context_path)
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
         try:
@@ -99,15 +113,78 @@ async def run_pipeline(
             )
             fixture_metadata = {}
 
-    generator = AnalysisGenerator(enabled_markets=settings.enabled_markets)
+        if match_context is None:
+            try:
+                games, _, _ = load_or_fetch_fixtures_with_metadata(
+                    date_option,
+                    output_dir=output_root,
+                    allowed_league_ids=settings.allowed_league_ids,
+                    api_timeout_seconds=settings.api_timeout_seconds,
+                )
+                if games:
+                    _, match_context = await fetch_team_match_data(
+                        games,
+                        target_date=target_date,
+                        include_streaks=False,
+                        include_context=True,
+                        request_interval=settings.sofascore_request_interval_seconds,
+                        request_jitter=settings.sofascore_request_jitter_seconds,
+                        request_burst_size=settings.sofascore_request_burst_size,
+                        request_burst_pause=settings.sofascore_request_burst_pause_seconds,
+                        request_backoff_base=settings.sofascore_request_backoff_base_seconds,
+                        request_max_retries=settings.sofascore_request_max_retries,
+                        statistics_cache_dir=output_root / "sofascore_statistics",
+                        worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
+                            game, context, fixture_metadata, derby_matcher
+                        ),
+                    )
+                    _save_json(match_context, context_path)
+            except Exception:
+                LOGGER.warning("Match context unavailable; referee scoring will be skipped", exc_info=True)
+                match_context = {}
+
+    generator = AnalysisGenerator(
+        enabled_markets=settings.enabled_markets,
+        referee_card_bonus=settings.referee_card_bonus,
+        referee_card_penalty=settings.referee_card_penalty,
+    )
+    derby_by_game = {
+        game: derby_matcher.is_derby(*_split_match(game))
+        for game in (match_context or {})
+    }
+    qualifying_games = [
+        game for game, context in (match_context or {}).items()
+        if game in fixture_metadata
+        and qualifies_for_worth_watching(context, derby=derby_by_game.get(game, False))
+    ]
+    if any(_missing_team_statistics((match_context or {}).get(game)) for game in qualifying_games):
+        await enrich_cached_team_statistics(
+            match_context or {},
+            set(qualifying_games),
+            statistics_cache_dir=output_root / "sofascore_statistics",
+            request_interval=settings.sofascore_request_interval_seconds,
+            request_jitter=settings.sofascore_request_jitter_seconds,
+            request_burst_size=settings.sofascore_request_burst_size,
+            request_burst_pause=settings.sofascore_request_burst_pause_seconds,
+            request_backoff_base=settings.sofascore_request_backoff_base_seconds,
+            request_max_retries=settings.sofascore_request_max_retries,
+        )
+        _save_json(match_context or {}, context_path)
+
     predictions = generator.generate(
         streaks,
         prediction_threshold=prediction_threshold,
+        match_context=match_context or {},
     )
     payload = generator.build_payload(
         date=output_date,
         predictions=predictions,
         fixture_metadata=fixture_metadata,
+    )
+    payload["worth_watching"] = build_worth_watching(
+        match_context or {},
+        fixture_metadata,
+        derby_by_game,
     )
     generator.save_json(payload, analysis_path)
 
@@ -158,6 +235,32 @@ def _load_cached_streaks(path: Path) -> dict | None:
         raise RuntimeError("No team streaks found; stopping the pipeline")
 
     return data
+
+
+def _load_cached_json(path: Path) -> dict | None:
+    """Load an optional JSON object cache, treating invalid JSON as a miss."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _split_match(match_name: str) -> tuple[str, str]:
+    home, separator, away = match_name.partition(" - ")
+    return (home.strip(), away.strip()) if separator else ("", "")
+
+
+def _qualifies_for_worth_watching(game: str, context: Any, metadata: dict[str, Any], matcher: DerbyMatcher) -> bool:
+    """Avoid referee and aggregate-stat requests for excluded games."""
+    if game not in metadata:
+        return False
+    home, away = _split_match(game)
+    return qualifies_for_worth_watching(context, derby=matcher.is_derby(home, away))
+
+
+def _missing_team_statistics(context: Any) -> bool:
+    return not isinstance(context, dict) or not isinstance(context.get("team_statistics"), dict)
 
 
 def _save_json(data: dict, path: Path) -> None:

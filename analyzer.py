@@ -1352,6 +1352,133 @@ def prediction_value(candidate: Candidate) -> float:
     return candidate.score * candidate.confidence
 
 
+def _finite_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def referee_card_averages(context: Any) -> tuple[float | None, float | None]:
+    """Read career and event-competition total cards/game from API payloads."""
+    if not isinstance(context, dict):
+        return None, None
+    referee_data = context.get("referee")
+    if not isinstance(referee_data, dict):
+        return None, None
+    details = referee_data.get("referee")
+    if isinstance(details, dict) and isinstance(details.get("referee"), dict):
+        details = details["referee"]
+    if not isinstance(details, dict):
+        details = {}
+
+    event = context.get("event")
+    event = event.get("event", event) if isinstance(event, dict) else {}
+    tournament = event.get("tournament", {}) if isinstance(event, dict) else {}
+    unique = tournament.get("uniqueTournament", {}) if isinstance(tournament, dict) else {}
+    competition_id = (
+        unique.get("id", tournament.get("id"))
+        if isinstance(unique, dict)
+        else None
+    )
+
+    def average(source: dict[str, Any]) -> float | None:
+        game_keys = ("games", "appearances", "matches", "matchesOfficiated")
+        games = next(
+            (
+                _finite_number(source.get(key))
+                for key in game_keys
+                if source.get(key) is not None
+            ),
+            None,
+        )
+        yellows = _finite_number(source.get("yellowCards", source.get("yellow_cards")))
+        reds = _finite_number(source.get("redCards", source.get("red_cards")))
+        # Use yellow + red as the total-card proxy. The separately reported
+        # yellowRedCards count is excluded to avoid potentially double-counting
+        # second-yellow dismissals.
+        if games is None or games <= 0 or yellows is None or reds is None:
+            return None
+        return (yellows + reds) / games
+
+    career = average(details)
+    statistics = referee_data.get("statistics")
+    rows = statistics.get("statistics", []) if isinstance(statistics, dict) else []
+    if isinstance(rows, dict):
+        rows = [rows]
+    competition = None
+    if isinstance(rows, list) and competition_id is not None:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row_tournament = row.get("uniqueTournament")
+            row_id = row_tournament.get("id") if isinstance(row_tournament, dict) else None
+            if str(row_id) == str(competition_id):
+                competition = average(row)
+                break
+    return career, competition
+
+
+def apply_referee_card_adjustment(
+    candidate: Candidate,
+    context: Any,
+    *,
+    bonus: float = 5.0,
+    penalty: float = 5.0,
+) -> str:
+    """Apply a bounded, auditable modifier to Over/Under 4.5 cards only."""
+    if candidate.category != "cards_ou" or candidate_threshold(candidate) != 4.5:
+        return ""
+    career, competition = referee_card_averages(context)
+    available = [value for value in (career, competition) if value is not None]
+    if not available:
+        return "Referee data unavailable; no adjustment applied."
+    if len(available) == 2 and (career < 4.0) != (competition < 4.0):
+        return "Career and competition referee averages disagree; no adjustment applied."
+
+    low_profile = all(value < 4.0 for value in available)
+    high_profile = all(value > 4.0 for value in available)
+    if not (low_profile or high_profile):
+        return "Referee averages are near 4 cards/game; no adjustment applied."
+
+    strength = sum(
+        min(1.0, abs(value - 4.0) / 0.5) for value in available
+    ) / len(available)
+    if len(available) == 1:
+        strength *= 0.5
+    # Contradiction between career/competition scopes is handled above. Near
+    # threshold values naturally produce a smaller adjustment via strength.
+    if strength <= 0:
+        return "Referee averages are near 4 cards/game; no adjustment applied."
+
+    supports_under = low_profile
+    is_under = candidate.market.endswith("_under")
+    aligned = supports_under == is_under
+    configured = bonus if aligned else penalty
+    amount = min(PENALTY_MAJOR, max(0.0, configured)) * strength
+    applied = amount if aligned else min(amount, max(0.0, candidate.score))
+    candidate.score = max(0.0, candidate.score + (applied if aligned else -applied))
+    average_text = " and ".join(f"{value:.2f}" for value in available)
+    if aligned:
+        tendency = "below" if low_profile else "above"
+        side = "Under" if is_under else "Over"
+        candidate.bonuses.append(
+            f"Referee averages {tendency} 4 cards/game; "
+            f"supports {side} 4.5 (+{applied:.1f})."
+        )
+        return f"Referee averages {tendency} 4 cards/game; supports {side} 4.5."
+    prediction_side = "Under" if is_under else "Over"
+    candidate.penalties.append(
+        f"Referee averages conflict with {prediction_side} 4.5 "
+        f"({applied:.1f} penalty; averages {average_text})."
+    )
+    return (
+        f"Referee averages conflict with {prediction_side} 4.5; "
+        f"applied {applied:.1f} penalty."
+    )
+
+
 def display_market(candidate: Candidate) -> str:
     """Convert a canonical candidate into a readable market label."""
 
@@ -1399,15 +1526,20 @@ class Analyzer:
         self,
         data: dict[str, dict[str, Any]] | None = None,
         enabled_markets: tuple[str, ...] | set[str] | None = None,
+        referee_card_bonus: float = 5.0,
+        referee_card_penalty: float = 5.0,
     ):
         self.data = data or {}
         self.enabled_markets = None if enabled_markets is None else set(enabled_markets)
         self.threshold_excluded_count = 0
+        self.referee_card_bonus = max(0.0, referee_card_bonus)
+        self.referee_card_penalty = max(0.0, referee_card_penalty)
 
     def analyze(
         self,
         data: dict[str, dict[str, Any]] | None = None,
         prediction_threshold: float | None = None,
+        match_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Analyze all matches and return every qualifying candidate."""
         if prediction_threshold is not None and prediction_threshold < 0:
@@ -1430,36 +1562,43 @@ class Analyzer:
             )
             for candidate in candidates:
                 score_candidate(candidate, evidences)
-                results.append(
-                    {
-                        "home": candidate.home,
-                        "away": candidate.away,
-                        "market": display_market(candidate),
-                        "score": round(candidate.score, 2),
-                        "confidence": round(candidate.confidence * 100, 2),
-                        "prediction": round(prediction_value(candidate), 2),
-                        "evidence": [
-                            {
-                                "section": e.section,
-                                "name": e.name,
-                                "value": e.raw_value,
-                                "team": e.team,
-                            }
-                            for e in candidate.evidences
-                        ],
-                        "supporting_evidence": [
-                            {
-                                "section": e.section,
-                                "name": e.name,
-                                "value": e.raw_value,
-                                "team": e.team,
-                            }
-                            for e in candidate.supporting_evidences
-                        ],
-                        "bonuses": candidate.bonuses,
-                        "penalties": candidate.penalties,
-                    }
+                explanation = apply_referee_card_adjustment(
+                    candidate,
+                    (match_context or {}).get(match_name),
+                    bonus=self.referee_card_bonus,
+                    penalty=self.referee_card_penalty,
                 )
+                prediction = {
+                    "home": candidate.home,
+                    "away": candidate.away,
+                    "market": display_market(candidate),
+                    "score": round(candidate.score, 2),
+                    "confidence": round(candidate.confidence * 100, 2),
+                    "prediction": round(prediction_value(candidate), 2),
+                    "evidence": [
+                        {
+                            "section": e.section,
+                            "name": e.name,
+                            "value": e.raw_value,
+                            "team": e.team,
+                        }
+                        for e in candidate.evidences
+                    ],
+                    "supporting_evidence": [
+                        {
+                            "section": e.section,
+                            "name": e.name,
+                            "value": e.raw_value,
+                            "team": e.team,
+                        }
+                        for e in candidate.supporting_evidences
+                    ],
+                    "bonuses": candidate.bonuses,
+                    "penalties": candidate.penalties,
+                }
+                if explanation:
+                    prediction["explanations"] = [explanation]
+                results.append(prediction)
 
         if prediction_threshold is not None:
             eligible_results = [

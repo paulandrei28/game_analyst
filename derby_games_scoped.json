@@ -1,0 +1,1082 @@
+[
+  [
+    "Argentina",
+    "Brazil"
+  ],
+  [
+    "Argentina",
+    "England"
+  ],
+  [
+    "Argentina",
+    "Mexico"
+  ],
+  [
+    "Argentina",
+    "Netherlands"
+  ],
+  [
+    "Brazil",
+    "Italy"
+  ],
+  [
+    "Brazil",
+    "Mexico"
+  ],
+  [
+    "Brazil",
+    "Uruguay"
+  ],
+  [
+    "Argentina",
+    "Uruguay"
+  ],
+  [
+    "Chile",
+    "Peru"
+  ],
+  [
+    "Ecuador",
+    "Peru"
+  ],
+  [
+    "Australia",
+    "New Zealand"
+  ],
+  [
+    "Australia",
+    "Indonesia"
+  ],
+  [
+    "Australia",
+    "Japan"
+  ],
+  [
+    "Australia",
+    "South Korea"
+  ],
+  [
+    "China",
+    "Hong Kong"
+  ],
+  [
+    "China",
+    "Japan"
+  ],
+  [
+    "China",
+    "South Korea"
+  ],
+  [
+    "India",
+    "Pakistan"
+  ],
+  [
+    "Indonesia",
+    "Malaysia"
+  ],
+  [
+    "Indonesia",
+    "Singapore"
+  ],
+  [
+    "Indonesia",
+    "Vietnam"
+  ],
+  [
+    "Iran",
+    "Iraq"
+  ],
+  [
+    "Iran",
+    "Saudi Arabia"
+  ],
+  [
+    "Iraq",
+    "Kuwait"
+  ],
+  [
+    "Japan",
+    "South Korea"
+  ],
+  [
+    "North Korea",
+    "South Korea"
+  ],
+  [
+    "Qatar",
+    "United Arab Emirates"
+  ],
+  [
+    "Thailand",
+    "Vietnam"
+  ],
+  [
+    "Afghanistan",
+    "Pakistan"
+  ],
+  [
+    "Algeria",
+    "Egypt"
+  ],
+  [
+    "Algeria",
+    "Morocco"
+  ],
+  [
+    "Algeria",
+    "Tunisia"
+  ],
+  [
+    "Egypt",
+    "Tunisia"
+  ],
+  [
+    "Ghana",
+    "Nigeria"
+  ],
+  [
+    "Ivory Coast",
+    "Ghana"
+  ],
+  [
+    "Cameroon",
+    "Nigeria"
+  ],
+  [
+    "Senegal",
+    "Mali"
+  ],
+  [
+    "Morocco",
+    "Tunisia"
+  ],
+  [
+    "Albania",
+    "Kosovo"
+  ],
+  [
+    "Albania",
+    "Serbia"
+  ],
+  [
+    "Austria",
+    "Hungary"
+  ],
+  [
+    "Belgium",
+    "Netherlands"
+  ],
+  [
+    "Croatia",
+    "Serbia"
+  ],
+  [
+    "Czech Republic",
+    "Slovakia"
+  ],
+  [
+    "Denmark",
+    "Sweden"
+  ],
+  [
+    "England",
+    "Germany"
+  ],
+  [
+    "England",
+    "Republic of Ireland"
+  ],
+  [
+    "England",
+    "Scotland"
+  ],
+  [
+    "France",
+    "Germany"
+  ],
+  [
+    "France",
+    "Italy"
+  ],
+  [
+    "France",
+    "Spain"
+  ],
+  [
+    "Germany",
+    "Netherlands"
+  ],
+  [
+    "Germany",
+    "Italy"
+  ],
+  [
+    "Hungary",
+    "Romania"
+  ],
+  [
+    "Hungary",
+    "Poland"
+  ],
+  [
+    "Italy",
+    "Spain"
+  ],
+  [
+    "Northern Ireland",
+    "Republic of Ireland"
+  ],
+  [
+    "Poland",
+    "Russia"
+  ],
+  [
+    "Portugal",
+    "Spain"
+  ],
+  [
+    "Honduras",
+    "Costa Rica"
+  ],
+  [
+    "El Salvador",
+    "Honduras"
+  ],
+  [
+    "Mexico",
+    "United States"
+  ],
+  [
+    "Canada",
+    "United States"
+  ],
+  [
+    "Manchester United",
+    "Liverpool"
+  ],
+  [
+    "Manchester City",
+    "Manchester United"
+  ],
+  [
+    "Arsenal",
+    "Tottenham Hotspur"
+  ],
+  [
+    "Liverpool",
+    "Everton"
+  ],
+  [
+    "Newcastle United",
+    "Sunderland"
+  ],
+  [
+    "Aston Villa",
+    "Birmingham City"
+  ],
+  [
+    "Blackburn Rovers",
+    "Burnley"
+  ],
+  [
+    "Manchester United",
+    "Leeds United"
+  ],
+  [
+    "Chelsea",
+    "Arsenal"
+  ],
+  [
+    "Chelsea",
+    "Tottenham Hotspur"
+  ],
+  [
+    "West Ham United",
+    "Tottenham Hotspur"
+  ],
+  [
+    "Southampton",
+    "Portsmouth"
+  ],
+  [
+    "Brighton & Hove Albion",
+    "Crystal Palace"
+  ],
+  [
+    "Norwich City",
+    "Ipswich Town"
+  ],
+  [
+    "Sheffield United",
+    "Sheffield Wednesday"
+  ],
+  [
+    "West Bromwich Albion",
+    "Wolverhampton Wanderers"
+  ],
+  [
+    "Bristol City",
+    "Bristol Rovers"
+  ],
+  [
+    "Queens Park Rangers",
+    "Brentford"
+  ],
+  [
+    "Millwall",
+    "West Ham United"
+  ],
+  [
+    "Celtic",
+    "Rangers"
+  ],
+  [
+    "Heart of Midlothian",
+    "Hibernian"
+  ],
+  [
+    "Dundee United",
+    "Aberdeen"
+  ],
+  [
+    "Dundee FC",
+    "Dundee United"
+  ],
+  [
+    "Cardiff City",
+    "Swansea City"
+  ],
+  [
+    "Linfield",
+    "Glentoran"
+  ],
+  [
+    "Cliftonville",
+    "Crusaders"
+  ],
+  [
+    "Bohemians",
+    "Shamrock Rovers"
+  ],
+  [
+    "Shamrock Rovers",
+    "Shelbourne"
+  ],
+  [
+    "Real Madrid",
+    "Barcelona"
+  ],
+  [
+    "Real Madrid",
+    "Atlético Madrid"
+  ],
+  [
+    "Sevilla",
+    "Real Betis"
+  ],
+  [
+    "Athletic Club",
+    "Real Sociedad"
+  ],
+  [
+    "Valencia",
+    "Villarreal"
+  ],
+  [
+    "Celta Vigo",
+    "Deportivo La Coruña"
+  ],
+  [
+    "Barcelona",
+    "Espanyol"
+  ],
+  [
+    "Valencia",
+    "Levante"
+  ],
+  [
+    "Benfica",
+    "Porto"
+  ],
+  [
+    "Benfica",
+    "Sporting CP"
+  ],
+  [
+    "Porto",
+    "Boavista"
+  ],
+  [
+    "Braga",
+    "Vitória SC"
+  ],
+  [
+    "Paris Saint-Germain",
+    "Marseille"
+  ],
+  [
+    "Lyon",
+    "Saint-Étienne"
+  ],
+  [
+    "Lille",
+    "Lens"
+  ],
+  [
+    "Nice",
+    "Monaco"
+  ],
+  [
+    "Bordeaux",
+    "Toulouse"
+  ],
+  [
+    "Rennes",
+    "Nantes"
+  ],
+  [
+    "AC Milan",
+    "Inter Milan"
+  ],
+  [
+    "Inter Milan",
+    "Juventus"
+  ],
+  [
+    "Roma",
+    "Lazio"
+  ],
+  [
+    "Juventus",
+    "Torino"
+  ],
+  [
+    "Roma",
+    "Napoli"
+  ],
+  [
+    "Genoa",
+    "Sampdoria"
+  ],
+  [
+    "Bologna",
+    "Fiorentina"
+  ],
+  [
+    "Hellas Verona",
+    "Chievo Verona"
+  ],
+  [
+    "Palermo",
+    "Catania"
+  ],
+  [
+    "Bari",
+    "Lecce"
+  ],
+  [
+    "Parma",
+    "Bologna"
+  ],
+  [
+    "Bayern Munich",
+    "Borussia Dortmund"
+  ],
+  [
+    "Borussia Dortmund",
+    "Schalke 04"
+  ],
+  [
+    "Hamburger SV",
+    "Werder Bremen"
+  ],
+  [
+    "Hertha BSC",
+    "Union Berlin"
+  ],
+  [
+    "Bayern Munich",
+    "1860 Munich"
+  ],
+  [
+    "1. FC Köln",
+    "Borussia Mönchengladbach"
+  ],
+  [
+    "VfB Stuttgart",
+    "Karlsruher SC"
+  ],
+  [
+    "Eintracht Frankfurt",
+    "Kickers Offenbach"
+  ],
+  [
+    "Ajax",
+    "Feyenoord"
+  ],
+  [
+    "Ajax",
+    "PSV Eindhoven"
+  ],
+  [
+    "Feyenoord",
+    "Sparta Rotterdam"
+  ],
+  [
+    "Anderlecht",
+    "Standard Liège"
+  ],
+  [
+    "Royal Antwerp",
+    "Beerschot"
+  ],
+  [
+    "Club Brugge",
+    "Cercle Brugge"
+  ],
+  [
+    "FC Zürich",
+    "Grasshopper Club Zürich"
+  ],
+  [
+    "Austria Wien",
+    "Rapid Wien"
+  ],
+  [
+    "Brøndby IF",
+    "FC Copenhagen"
+  ],
+  [
+    "AIK",
+    "Djurgårdens IF"
+  ],
+  [
+    "AIK",
+    "Hammarby IF"
+  ],
+  [
+    "Djurgårdens IF",
+    "Hammarby IF"
+  ],
+  [
+    "Vålerenga",
+    "Lillestrøm"
+  ],
+  [
+    "HJK Helsinki",
+    "HIFK"
+  ],
+  [
+    "Olympiacos",
+    "Panathinaikos"
+  ],
+  [
+    "PAOK",
+    "Aris Thessaloniki"
+  ],
+  [
+    "PAOK",
+    "Iraklis"
+  ],
+  [
+    "AEK Athens",
+    "Panathinaikos"
+  ],
+  [
+    "Fenerbahçe",
+    "Galatasaray"
+  ],
+  [
+    "Beşiktaş",
+    "Galatasaray"
+  ],
+  [
+    "Beşiktaş",
+    "Fenerbahçe"
+  ],
+  [
+    "Dinamo Zagreb",
+    "Hajduk Split"
+  ],
+  [
+    "Hajduk Split",
+    "Rijeka"
+  ],
+  [
+    "Dinamo Zagreb",
+    "Lokomotiva Zagreb"
+  ],
+  [
+    "Red Star Belgrade",
+    "Partizan Belgrade"
+  ],
+  [
+    "Sarajevo",
+    "Željezničar"
+  ],
+  [
+    "Maribor",
+    "Olimpija Ljubljana"
+  ],
+  [
+    "Vardar",
+    "Pelister"
+  ],
+  [
+    "KF Tirana",
+    "Partizani Tirana"
+  ],
+  [
+    "KF Tirana",
+    "Dinamo Tirana"
+  ],
+  [
+    "KF Tirana",
+    "Vllaznia Shkodër"
+  ],
+  [
+    "Levski Sofia",
+    "CSKA Sofia"
+  ],
+  [
+    "Lokomotiv Plovdiv",
+    "Botev Plovdiv"
+  ],
+  [
+    "FCSB",
+    "Dinamo București"
+  ],
+  [
+    "CFR Cluj",
+    "Universitatea Cluj"
+  ],
+  [
+    "Universitatea Craiova",
+    "FC U Craiova 1948"
+  ],
+  [
+    "Politehnica Iași",
+    "FC Botoșani"
+  ],
+  [
+    "Petrolul Ploiești",
+    "Rapid București"
+  ],
+  [
+    "Rapid București",
+    "Dinamo București"
+  ],
+  [
+    "FCSB",
+    "Rapid București"
+  ],
+  [
+    "Dynamo Kyiv",
+    "Shakhtar Donetsk"
+  ],
+  [
+    "Cracovia",
+    "Wisła Kraków"
+  ],
+  [
+    "Legia Warsaw",
+    "Polonia Warsaw"
+  ],
+  [
+    "Sparta Prague",
+    "Slavia Prague"
+  ],
+  [
+    "Slovan Bratislava",
+    "Inter Bratislava"
+  ],
+  [
+    "Ferencváros",
+    "Újpest"
+  ],
+  [
+    "Spartak Moscow",
+    "CSKA Moscow"
+  ],
+  [
+    "Spartak Moscow",
+    "Dynamo Moscow"
+  ],
+  [
+    "Dinamo Tbilisi",
+    "Torpedo Kutaisi"
+  ],
+  [
+    "Ararat-Armenia",
+    "Pyunik Yerevan"
+  ],
+  [
+    "Neftçi Baku",
+    "Qarabağ"
+  ],
+  [
+    "APOEL",
+    "Omonia"
+  ],
+  [
+    "Boca Juniors",
+    "River Plate"
+  ],
+  [
+    "Independiente",
+    "Racing Club"
+  ],
+  [
+    "Rosario Central",
+    "Newell's Old Boys"
+  ],
+  [
+    "Estudiantes",
+    "Gimnasia y Esgrima La Plata"
+  ],
+  [
+    "Belgrano",
+    "Talleres"
+  ],
+  [
+    "Godoy Cruz",
+    "Independiente Rivadavia"
+  ],
+  [
+    "Colón",
+    "Unión Santa Fe"
+  ],
+  [
+    "San Lorenzo",
+    "Huracán"
+  ],
+  [
+    "River Plate",
+    "Independiente"
+  ],
+  [
+    "Quilmes",
+    "Argentino de Quilmes"
+  ],
+  [
+    "Corinthians",
+    "Palmeiras"
+  ],
+  [
+    "Palmeiras",
+    "São Paulo"
+  ],
+  [
+    "Corinthians",
+    "São Paulo"
+  ],
+  [
+    "Corinthians",
+    "Santos"
+  ],
+  [
+    "Flamengo",
+    "Fluminense"
+  ],
+  [
+    "Flamengo",
+    "Vasco da Gama"
+  ],
+  [
+    "Botafogo",
+    "Flamengo"
+  ],
+  [
+    "Botafogo",
+    "Fluminense"
+  ],
+  [
+    "Grêmio",
+    "Internacional"
+  ],
+  [
+    "Atlético Mineiro",
+    "Cruzeiro"
+  ],
+  [
+    "Bahia",
+    "Vitória"
+  ],
+  [
+    "Ceará",
+    "Fortaleza"
+  ],
+  [
+    "Coritiba",
+    "Athletico Paranaense"
+  ],
+  [
+    "Náutico",
+    "Sport Recife"
+  ],
+  [
+    "Remo",
+    "Paysandu"
+  ],
+  [
+    "Ponte Preta",
+    "Guarani"
+  ],
+  [
+    "Peñarol",
+    "Nacional"
+  ],
+  [
+    "Colo-Colo",
+    "Universidad de Chile"
+  ],
+  [
+    "Universidad de Chile",
+    "Universidad Católica"
+  ],
+  [
+    "Alianza Lima",
+    "Universitario"
+  ],
+  [
+    "Bolívar",
+    "The Strongest"
+  ],
+  [
+    "Blooming",
+    "Oriente Petrolero"
+  ],
+  [
+    "Barcelona SC",
+    "Emelec"
+  ],
+  [
+    "Millonarios",
+    "Santa Fe"
+  ],
+  [
+    "Atlético Nacional",
+    "Independiente Medellín"
+  ],
+  [
+    "América de Cali",
+    "Deportivo Cali"
+  ],
+  [
+    "Atlético Nacional",
+    "Millonarios"
+  ],
+  [
+    "Olimpia",
+    "Cerro Porteño"
+  ],
+  [
+    "Caracas FC",
+    "Deportivo Táchira"
+  ],
+  [
+    "Juventus (AC)",
+    "Rio Branco (AC)"
+  ],
+  [
+    "Independência",
+    "Rio Branco (AC)"
+  ],
+  [
+    "CRB",
+    "CSA"
+  ],
+  [
+    "ASA",
+    "Cruzeiro de Arapiraca"
+  ],
+  [
+    "São José (AP)",
+    "Ypiranga (AP)"
+  ],
+  [
+    "Nacional (AM)",
+    "Rio Negro (AM)"
+  ],
+  [
+    "Nacional (AM)",
+    "São Raimundo (AM)"
+  ],
+  [
+    "São Raimundo (AM)",
+    "Sul América"
+  ],
+  [
+    "Rio Negro (AM)",
+    "São Raimundo (AM)"
+  ],
+  [
+    "Fast Clube",
+    "Nacional (AM)"
+  ],
+  [
+    "Amazonas FC",
+    "Manaus FC"
+  ],
+  [
+    "Galícia",
+    "Ypiranga (BA)"
+  ],
+  [
+    "Bahia",
+    "Botafogo (BA)"
+  ],
+  [
+    "Bahia",
+    "Galícia"
+  ],
+  [
+    "Ceará",
+    "Ferroviário"
+  ],
+  [
+    "Ferroviário",
+    "Fortaleza"
+  ],
+  [
+    "Brasiliense",
+    "Gama"
+  ],
+  [
+    "Brasília FC",
+    "Gama"
+  ],
+  [
+    "Desportiva Ferroviária",
+    "Rio Branco (ES)"
+  ],
+  [
+    "Rio Branco (ES)",
+    "Vitória (ES)"
+  ],
+  [
+    "Goiás",
+    "Vila Nova"
+  ],
+  [
+    "Atlético Goianiense",
+    "Goiânia EC"
+  ],
+  [
+    "Atlético Goianiense",
+    "Goiás"
+  ],
+  [
+    "Atlético Goianiense",
+    "Vila Nova"
+  ],
+  [
+    "Maranhão AC",
+    "Sampaio Corrêa"
+  ],
+  [
+    "Maranhão AC",
+    "Moto Club"
+  ],
+  [
+    "Moto Club",
+    "Sampaio Corrêa"
+  ],
+  [
+    "Dom Bosco",
+    "Mixto"
+  ],
+  [
+    "Mixto",
+    "Operário Várzea-Grandense"
+  ],
+  [
+    "Operário-MS",
+    "Comercial-MS"
+  ],
+  [
+    "Atlético Mineiro",
+    "América Mineiro"
+  ],
+  [
+    "América Mineiro",
+    "Cruzeiro"
+  ],
+  [
+    "Mamoré",
+    "URT"
+  ],
+  [
+    "Tupi",
+    "Tupynambás"
+  ],
+  [
+    "Athletico Paranaense",
+    "Paraná Clube"
+  ],
+  [
+    "Coritiba",
+    "Paraná Clube"
+  ],
+  [
+    "Náutico",
+    "Santa Cruz"
+  ],
+  [
+    "Santa Cruz",
+    "Sport Recife"
+  ],
+  [
+    "América-PE",
+    "Náutico"
+  ],
+  [
+    "América-PE",
+    "Santa Cruz"
+  ],
+  [
+    "América-PE",
+    "Sport Recife"
+  ],
+  [
+    "Flamengo-PI",
+    "River-PI"
+  ],
+  [
+    "Caxias",
+    "Juventude"
+  ],
+  [
+    "Rio Grande",
+    "São Paulo-RS"
+  ],
+  [
+    "Bagé",
+    "Guarany de Bagé"
+  ],
+  [
+    "Brasil de Pelotas",
+    "Pelotas"
+  ],
+  [
+    "Avaí",
+    "Figueirense"
+  ],
+  [
+    "Avaí",
+    "Criciúma"
+  ],
+  [
+    "Criciúma",
+    "Figueirense"
+  ],
+  [
+    "Confiança",
+    "Sergipe"
+  ],
+  [
+    "Bahia",
+    "Sport Recife"
+  ]
+]

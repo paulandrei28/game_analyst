@@ -8,6 +8,8 @@ output_dir = "output"
 [analysis]
 # Optional: uncomment to exclude predictions below this computed value.
 prediction_threshold = 65.0
+referee_card_bonus = 5.0
+referee_card_penalty = 5.0
 
 # Market categories included in the final ranking. Comment out any category
 # that is not needed. O/U entries include every available threshold.

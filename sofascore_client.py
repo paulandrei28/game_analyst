@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
 import random
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -506,11 +509,11 @@ class SofascoreSearcher:
         # SofaScore often renders near-term matches as relative labels instead
         # of an explicit calendar date. Resolve those labels from the actual
         # current date, not from the requested fixture date.
-        if re.search(r"\btomorrow\b", lower):
+        if re.search(r"\b(tomorrow|mâine|maine)\b", lower):
             return today + timedelta(days=1)
-        if re.search(r"\btoday\b", lower):
+        if re.search(r"\b(today|azi)\b", lower):
             return today
-        if re.search(r"\byesterday\b", lower):
+        if re.search(r"\b(yesterday|ieri)\b", lower):
             return today - timedelta(days=1)
 
         for pattern in (
@@ -959,17 +962,13 @@ RESOURCE_SPECS: dict[str, ResourceSpec] = {
     ),
     # Match / event resources.
     "event": ResourceSpec("event", "/event/{event_id}"),
+    "event_odds_1x2": ResourceSpec(
+        "event_odds_1x2",
+        "/event/{event_id}/odds/1/all",
+    ),
     "team_streaks": ResourceSpec(
         "team_streaks",
         "/event/{event_id}/team-streaks",
-    ),
-    "statistics": ResourceSpec(
-        "statistics",
-        "/event/{event_id}/statistics",
-    ),
-    "incidents": ResourceSpec(
-        "incidents",
-        "/event/{event_id}/incidents",
     ),
     "lineups": ResourceSpec(
         "lineups",
@@ -978,10 +977,6 @@ RESOURCE_SPECS: dict[str, ResourceSpec] = {
     "pregame_form": ResourceSpec(
         "pregame_form",
         "/event/{event_id}/pregame-form",
-    ),
-    "h2h_events": ResourceSpec(
-        "h2h_events",
-        "/event/{event_id}/h2h/events",
     ),
     "managers": ResourceSpec(
         "managers",
@@ -998,13 +993,13 @@ RESOURCE_SPECS: dict[str, ResourceSpec] = {
         "team_performance",
         "/team/{team_id}/performance",
     ),
+    "team_statistics": ResourceSpec(
+        "team_statistics",
+        "/team/{team_id}/unique-tournament/{tournament_id}/season/{season_id}/statistics/{statistics_type}",
+    ),
     "team_events_next": ResourceSpec(
         "team_events_next",
         "/team/{team_id}/events/next",
-    ),
-    "team_events_last": ResourceSpec(
-        "team_events_last",
-        "/team/{team_id}/events/last",
     ),
     # Referee resources.
     "referee": ResourceSpec("referee", "/referee/{referee_id}"),
@@ -1059,6 +1054,8 @@ class SofascoreClient:
         startup_delay_min: float = 3.0,
         startup_delay_max: float = 5.0,
         navigation_timeout_ms: int = 60_000,
+        statistics_cache_dir: str | Path | None = None,
+        statistics_cache_ttl_seconds: float = 12 * 60 * 60,
     ) -> None:
         self.request_interval = max(0.0, request_interval)
         self.request_jitter = max(0.0, request_jitter)
@@ -1071,6 +1068,9 @@ class SofascoreClient:
         self.startup_delay_min = max(0.0, startup_delay_min)
         self.startup_delay_max = max(self.startup_delay_min, startup_delay_max)
         self.navigation_timeout_ms = navigation_timeout_ms
+        self.statistics_cache_dir = Path(statistics_cache_dir) if statistics_cache_dir else None
+        self.statistics_cache_ttl_seconds = max(0.0, statistics_cache_ttl_seconds)
+        self._team_statistics_cache: dict[tuple[str, str, str, str], Any] = {}
 
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
@@ -1340,17 +1340,20 @@ class SofascoreClient:
         if not event_id:
             return None
 
+        match_date = (
+            await self.searcher._game_result_date(result)
+            if target_date is not None
+            else None
+        )
+        event_details = self.searcher._game_details_cache.get(event_id)
         return {
             "event_id": event_id,
             "href": result.href,
             "text": result.text,
             "data_id": result.data_id,
             "kind": result.kind,
-            "match_date": (
-                await self.searcher._game_result_date(result)
-                if target_date is not None
-                else None
-            ),
+            "match_date": match_date,
+            "event_data": event_details,
         }
 
     async def fetch_match_resource_by_name(
@@ -1503,9 +1506,10 @@ class SofascoreClient:
         event_id: int | str,
         *,
         include_statistics: bool = True,
+        event_payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return the referee attached to a match plus optional referee statistics."""
-        event = await self.fetch("event", event_id=event_id)
+        event = event_payload if isinstance(event_payload, dict) else await self.fetch("event", event_id=event_id)
         if not isinstance(event, dict):
             return {"event_id": event_id, "referee": None, "statistics": None}
 
@@ -1514,7 +1518,11 @@ class SofascoreClient:
             return {"event_id": event_id, "referee": None, "statistics": None}
 
         referee_id = referee["id"]
-        details = await self.fetch("referee", referee_id=referee_id)
+        try:
+            details = await self.fetch("referee", referee_id=referee_id)
+        except Exception:
+            LOGGER.debug("Could not fetch referee profile %s", referee_id, exc_info=True)
+            details = referee
         statistics = None
         if include_statistics:
             try:
@@ -1522,14 +1530,10 @@ class SofascoreClient:
                     "referee_statistics",
                     referee_id=referee_id,
                 )
-            except SofascoreHTTPError as exc:
+            except Exception as exc:
                 # Keep the basic referee data useful even if the separate stats
                 # resource is temporarily unavailable.
-                LOGGER.warning(
-                    "Could not fetch referee statistics for %s (status=%s)",
-                    referee_id,
-                    exc.status_code,
-                )
+                LOGGER.debug("Could not fetch referee statistics for %s: %s", referee_id, exc)
 
         return {
             "event_id": event_id,
@@ -1540,6 +1544,49 @@ class SofascoreClient:
     async def fetch_team_records(self, team_id: int | str) -> Any:
         """Return SofaScore's team performance/form resource."""
         return await self.fetch("team_performance", team_id=team_id)
+
+    async def fetch_team_statistics(
+        self,
+        team_id: int | str,
+        tournament_id: int | str,
+        season_id: int | str,
+        statistics_type: str = "overall",
+    ) -> Any:
+        """Fetch one team's competition-season statistics, reusing keyed cache."""
+        key = (str(team_id), str(tournament_id), str(season_id), str(statistics_type))
+        if key in self._team_statistics_cache:
+            return self._team_statistics_cache[key]
+
+        cache_path = None
+        if self.statistics_cache_dir is not None:
+            cache_path = self.statistics_cache_dir / (
+                f"team_{key[0]}_tournament_{key[1]}_season_{key[2]}_{key[3]}.json"
+            )
+            try:
+                if cache_path.is_file():
+                    cached_at = time.time() - cache_path.stat().st_mtime
+                    cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                    if cached_at <= self.statistics_cache_ttl_seconds:
+                        self._team_statistics_cache[key] = cached
+                        return cached
+            except (OSError, json.JSONDecodeError):
+                LOGGER.debug("Ignoring invalid SofaScore team statistics cache: %s", cache_path)
+
+        result = await self.fetch(
+            "team_statistics",
+            team_id=team_id,
+            tournament_id=tournament_id,
+            season_id=season_id,
+            statistics_type=statistics_type,
+        )
+        self._team_statistics_cache[key] = result
+        if result is not None and cache_path is not None:
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+            except OSError:
+                LOGGER.debug("Could not write SofaScore team statistics cache: %s", cache_path, exc_info=True)
+        return result
 
     async def fetch_team_streaks(
         self,

@@ -27,6 +27,7 @@ The pipeline reuses date-specific fixture metadata and team-streak data from
 - `nightly_runner.py` - scheduled-run helper.
 - `output/fixtures/` - fixture metadata cache.
 - `output/team_streaks/` - team-streak cache.
+- `output/match_context/` - event, referee, and 1X2 odds cache.
 - `output/analysis/` - JSON analysis payloads.
 - `output/report/` - Markdown reports.
 
@@ -137,6 +138,15 @@ Analysis JSON has a flat payload shape:
   ]
 }
 ```
+
+The payload also includes a compact `match_context` mapping keyed by `Home - Away`.
+Each entry has decimal 1X2 odds, a registered `derby` boolean, and referee
+estimates for penalty and red-card probabilities plus a high yellow-card
+tendency flag. Derby matching uses the local
+`derby_games_scoped.json` list with normalized aliases and bounded fuzzy lookup;
+it makes no requests while matching fixtures. Referee probabilities estimate
+the chance of at least one event from the selected per-match rate; the yellow
+tendency flag means at least 4.5 yellows per match.
 
 Predictions are sorted by score, then prediction value and confidence. The
 Markdown report includes the ranked overview and supporting evidence.

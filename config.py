@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,8 @@ class AppConfig:
     sofascore_request_burst_pause_seconds: float = 12.0
     sofascore_request_backoff_base_seconds: float = 3.0
     sofascore_request_max_retries: int = 4
+    referee_card_bonus: float = 5.0
+    referee_card_penalty: float = 5.0
 
     @property
     def allowed_league_ids(self) -> set[int]:
@@ -84,6 +87,15 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     prediction_threshold = None if threshold_value is None else float(threshold_value)
     if prediction_threshold is not None and prediction_threshold < 0:
         raise ValueError("analysis.prediction_threshold must be non-negative")
+    referee_card_bonus = float(analysis.get("referee_card_bonus", 5.0))
+    referee_card_penalty = float(analysis.get("referee_card_penalty", 5.0))
+    if (
+        not math.isfinite(referee_card_bonus)
+        or not math.isfinite(referee_card_penalty)
+        or referee_card_bonus < 0
+        or referee_card_penalty < 0
+    ):
+        raise ValueError("referee card bonus and penalty must be non-negative")
 
     configured_markets = analysis.get("enabled_markets", SUPPORTED_MARKETS)
     enabled_markets = tuple(str(market) for market in configured_markets)
@@ -120,6 +132,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     return AppConfig(
         date=str(pipeline.get("date", "today")),
         prediction_threshold=prediction_threshold,
+        referee_card_bonus=referee_card_bonus,
+        referee_card_penalty=referee_card_penalty,
         enabled_markets=enabled_markets,
         output_dir=output_dir,
         league_ids=league_ids,

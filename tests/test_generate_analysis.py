@@ -54,6 +54,12 @@ class AnalysisGeneratorTests(unittest.TestCase):
         self.assertEqual(
             payload["predictions"][1]["league"], {"id": None, "name": "Unknown"}
         )
+        without_context = generator.build_payload(
+            date="20260825",
+            predictions=[],
+            fixture_metadata={},
+        )
+        self.assertNotIn("match_context", without_context)
         with tempfile.TemporaryDirectory() as directory:
             output = generator.save_json(payload, Path(directory) / "nested/out.json")
             self.assertEqual(
