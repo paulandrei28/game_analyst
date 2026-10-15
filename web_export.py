@@ -7,6 +7,28 @@ from pathlib import Path
 ANALYSIS_PATTERN = re.compile(r"^analysis_(?P<date>\d{8})\.json$")
 
 
+def _latest_analysis(source_analysis: Path) -> tuple[Path, str] | None:
+    latest: tuple[Path, str] | None = None
+    for path in source_analysis.glob("analysis_*.json"):
+        match = ANALYSIS_PATTERN.match(path.name)
+        if match is None:
+            continue
+        report_date = match.group("date")
+        if latest is None or report_date > latest[1]:
+            latest = path, report_date
+    return latest
+
+
+def _write_index(path: Path, entries: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(".json.tmp")
+    temporary_path.write_text(
+        json.dumps({"reports": entries}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
+
+
 def export_reports(
     output_dir: str | Path,
     destination_dir: str | Path,
@@ -28,18 +50,9 @@ def export_reports(
     if index_path.is_file():
         entries = json.loads(index_path.read_text(encoding="utf-8")).get("reports", [])
 
-    latest_path: Path | None = None
-    latest_date: str | None = None
-    for source_path in source_analysis.glob("analysis_*.json"):
-        match = ANALYSIS_PATTERN.match(source_path.name)
-        if not match:
-            continue
-        report_date = match.group("date")
-        if latest_date is None or report_date > latest_date:
-            latest_date = report_date
-            latest_path = source_path
-
-    if latest_path is not None and latest_date is not None:
+    latest = _latest_analysis(source_analysis)
+    if latest is not None:
+        latest_path, latest_date = latest
         report_name = f"{latest_date}.json"
         data = json.loads(latest_path.read_text(encoding="utf-8"))
         payload = (
@@ -56,13 +69,7 @@ def export_reports(
         entries.append({"date": latest_date, "report": f"data/reports/{report_name}"})
 
     entries.sort(key=lambda entry: entry["date"], reverse=True)
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_index = index_path.with_suffix(".json.tmp")
-    temporary_index.write_text(
-        json.dumps({"reports": entries}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    temporary_index.replace(index_path)
+    _write_index(index_path, entries)
     return entries
 
 
@@ -88,11 +95,6 @@ def archive_oldest_report(destination_dir: str | Path) -> dict[str, str] | None:
         report_path.replace(destination_archive / report_path.name)
 
     remaining_entries = [entry for entry in entries if entry is not oldest_entry]
-    temporary_index = index_path.with_suffix(".json.tmp")
-    temporary_index.write_text(
-        json.dumps({"reports": remaining_entries}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    temporary_index.replace(index_path)
+    _write_index(index_path, remaining_entries)
 
     return oldest_entry

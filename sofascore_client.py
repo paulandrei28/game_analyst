@@ -1079,6 +1079,7 @@ class SofascoreClient:
         self._last_request_at: float | None = None
         self._request_count = 0
         self._browser_lock = asyncio.Lock()
+        self._api_request_lock = asyncio.Lock()
         self._match_index_loaded = False
         self._match_index: list[dict[str, Any]] = []
         self.searcher = SofascoreSearcher(self)
@@ -1171,6 +1172,11 @@ class SofascoreClient:
 
     async def fetch_path(self, path: str) -> Any:
         """Fetch an arbitrary relative SofaScore API path using the warm browser."""
+        async with self._api_request_lock:
+            return await self._fetch_path_locked(path)
+
+    async def _fetch_path_locked(self, path: str) -> Any:
+        """Perform one rate-limited API fetch while holding the request lock."""
         if not path.startswith("/"):
             path = f"/{path}"
         if not path.startswith(SOFASCORE_API_PREFIX + "/"):
@@ -1510,6 +1516,10 @@ class SofascoreClient:
     ) -> dict[str, Any]:
         """Return the referee attached to a match plus optional referee statistics."""
         event = event_payload if isinstance(event_payload, dict) else await self.fetch("event", event_id=event_id)
+        # Fixture discovery can hand us either the event itself or a wrapped
+        # response (the latter is what the daily cache stores).
+        if isinstance(event, dict) and isinstance(event.get("event"), dict):
+            event = event["event"]
         if not isinstance(event, dict):
             return {"event_id": event_id, "referee": None, "statistics": None}
 
@@ -1522,6 +1532,10 @@ class SofascoreClient:
             details = await self.fetch("referee", referee_id=referee_id)
         except Exception:
             LOGGER.debug("Could not fetch referee profile %s", referee_id, exc_info=True)
+            details = referee
+        if not isinstance(details, dict) or not details:
+            # Event payloads commonly include career totals, so retain those
+            # when the separate profile endpoint returns an empty response.
             details = referee
         statistics = None
         if include_statistics:

@@ -74,6 +74,15 @@ class RefereeCardScoringTests(unittest.TestCase):
             self.assertEqual(missing.score, 10)
             self.assertIn("no adjustment", explanation)
 
+    def test_conflicting_referee_data_gets_stronger_default_penalty(self):
+        candidate = self.candidate()
+        explanation = apply_referee_card_adjustment(
+            candidate,
+            {"referee": {"referee": {"games": 100, "yellowCards": 500, "redCards": 0}}},
+        )
+        self.assertEqual(candidate.score, 5)
+        self.assertIn("5.0 penalty", explanation)
+
     def test_scores_are_clamped_and_other_markets_are_unchanged(self):
         low = context((10, 100, 100), (10, 100, 100))
         clamped = self.candidate("over", score=1)

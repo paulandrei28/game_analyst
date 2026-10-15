@@ -1280,6 +1280,45 @@ def calculate_base_confidence(evidences: list[Evidence]) -> float:
     return max(0.0, min(1.0, weighted_sum / total_weight))
 
 
+def _add_section_agreement_bonus(candidate: Candidate) -> None:
+    general = [item for item in candidate.evidences if item.section == "general"]
+    head_to_head = [item for item in candidate.evidences if item.section == "head2head"]
+    if not general or not head_to_head:
+        return
+
+    general_strength = max(weighted_confidence(item) for item in general)
+    h2h_strength = max(weighted_confidence(item) for item in head_to_head)
+    bonus = H2H_AGREEMENT_BONUS * min(general_strength, h2h_strength)
+    candidate.score += bonus
+    candidate.bonuses.append(f"general + H2H agreement (+{bonus:.1f})")
+
+
+def _add_team_agreement_bonus(candidate: Candidate) -> None:
+    home_evidence = [
+        item for item in candidate.evidences
+        if item.section == "general" and item.team == "home"
+    ]
+    away_evidence = [
+        item for item in candidate.evidences
+        if item.section == "general" and item.team == "away"
+    ]
+    strongest_agreement = max(
+        (
+            min(weighted_confidence(home), weighted_confidence(away))
+            for home in home_evidence
+            for away in away_evidence
+            if home.category == away.category and home.direction == away.direction
+        ),
+        default=0.0,
+    )
+    if strongest_agreement <= 0:
+        return
+
+    bonus = TEAM_AGREEMENT_BONUS * strongest_agreement
+    candidate.score += bonus
+    candidate.bonuses.append(f"home + away agreement (+{bonus:.1f})")
+
+
 def score_candidate(
     candidate: Candidate,
     all_evidences: list[Evidence] | None = None,
@@ -1291,52 +1330,13 @@ def score_candidate(
     candidate.penalties.clear()
 
     evidences = all_evidences if all_evidences is not None else candidate.evidences
-    general = [e for e in candidate.evidences if e.section == "general"]
-    h2h = [e for e in candidate.evidences if e.section == "head2head"]
-
     candidate.score = sum(
         weighted_confidence(evidence) * EVIDENCE_SCORE_MULTIPLIER
         for evidence in candidate.evidences
     )
     candidate.confidence = calculate_base_confidence(candidate.evidences)
-
-    if general and h2h:
-        general_strength = max(weighted_confidence(e) for e in general)
-        h2h_strength = max(weighted_confidence(e) for e in h2h)
-        agreement_strength = min(general_strength, h2h_strength)
-        bonus = H2H_AGREEMENT_BONUS * agreement_strength
-
-        candidate.score += bonus
-        candidate.bonuses.append(f"general + H2H agreement (+{bonus:.1f})")
-
-    general_home = [
-        e for e in candidate.evidences if e.section == "general" and e.team == "home"
-    ]
-    general_away = [
-        e for e in candidate.evidences if e.section == "general" and e.team == "away"
-    ]
-
-    if general_home and general_away:
-        best_team_agreement = 0.0
-
-        for home_e in general_home:
-            for away_e in general_away:
-                if (
-                    home_e.category == away_e.category
-                    and home_e.direction == away_e.direction
-                ):
-                    best_team_agreement = max(
-                        best_team_agreement,
-                        min(
-                            weighted_confidence(home_e),
-                            weighted_confidence(away_e),
-                        ),
-                    )
-
-        if best_team_agreement > 0:
-            bonus = TEAM_AGREEMENT_BONUS * best_team_agreement
-            candidate.score += bonus
-            candidate.bonuses.append(f"home + away agreement (+{bonus:.1f})")
+    _add_section_agreement_bonus(candidate)
+    _add_team_agreement_bonus(candidate)
 
     relationship_bonus = supporting_evidence_bonus(candidate, evidences)
 
@@ -1425,7 +1425,7 @@ def apply_referee_card_adjustment(
     context: Any,
     *,
     bonus: float = 5.0,
-    penalty: float = 5.0,
+    penalty: float = 10.0,
 ) -> str:
     """Apply a bounded, auditable modifier to Over/Under 4.5 cards only."""
     if candidate.category != "cards_ou" or candidate_threshold(candidate) != 4.5:
@@ -1527,7 +1527,7 @@ class Analyzer:
         data: dict[str, dict[str, Any]] | None = None,
         enabled_markets: tuple[str, ...] | set[str] | None = None,
         referee_card_bonus: float = 5.0,
-        referee_card_penalty: float = 5.0,
+        referee_card_penalty: float = 10.0,
     ):
         self.data = data or {}
         self.enabled_markets = None if enabled_markets is None else set(enabled_markets)

@@ -139,14 +139,20 @@ Analysis JSON has a flat payload shape:
 }
 ```
 
-The payload also includes a compact `match_context` mapping keyed by `Home - Away`.
-Each entry has decimal 1X2 odds, a registered `derby` boolean, and referee
-estimates for penalty and red-card probabilities plus a high yellow-card
-tendency flag. Derby matching uses the local
+The payload also includes a compact `worth_watching` mapping keyed by `Home - Away`.
+A fixture is included when any of these conditions holds: home-win odds are
+above 1.90 and no higher than away-win odds; the fixture is a registered derby;
+or team-stat-based discipline risk is high for penalties, red cards, or yellow
+cards. Draw odds are retained for display but do not affect filtering. Discipline
+risk combines team season rates with competition baselines, and referee rates
+when available. Missing referee or team metrics lower the risk score instead of
+causing available team-only estimates to be discarded. The published object
+contains only league, odds, derby, and the
+three display stats. Derby matching uses the local
 `derby_games_scoped.json` list with normalized aliases and bounded fuzzy lookup;
 it makes no requests while matching fixtures. Referee probabilities estimate
-the chance of at least one event from the selected per-match rate; the yellow
-tendency flag means at least 4.5 yellows per match.
+the chance of at least one event from the selected per-match rate; high-risk
+classification uses the existing 65-point risk threshold.
 
 Predictions are sorted by score, then prediction value and confidence. The
 Markdown report includes the ranked overview and supporting evidence.

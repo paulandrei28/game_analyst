@@ -29,7 +29,7 @@ def normalize_team_name(name: str) -> str:
     decomposed = unicodedata.normalize("NFKD", name.casefold())
     ascii_name = "".join(char for char in decomposed if not unicodedata.combining(char))
     words = _WORD_RE.findall(ascii_name)
-    while words and words[0] in _SUFFIXES:
+    while words and words[0] in _SUFFIXES - {"club"}:
         words.pop(0)
     while words and words[-1] in _SUFFIXES:
         words.pop()
@@ -95,6 +95,7 @@ class DerbyMatcher:
                 if len(core_words) > 1:
                     aliases.add("".join(word[0] for word in core_words))
                     aliases.add(f"{core_words[0]} {''.join(word[0] for word in core_words[1:])}")
+                    aliases.add(f"{core_words[0][0]} {' '.join(core_words[1:])}")
                     aliases.add(" ".join(_ABBREVIATIONS.get(word, word) for word in core_words))
                     for index, word in enumerate(core_words):
                         short = _ABBREVIATIONS.get(word)
@@ -129,12 +130,13 @@ class DerbyMatcher:
                         break
         if len(candidates) > self.fuzzy_candidate_limit:
             candidates = set(sorted(candidates)[: self.fuzzy_candidate_limit])
-        ranked = sorted(
-            ((SequenceMatcher(None, normalized, alias).ratio(), canonical)
-             for canonical in candidates
-             for alias in self._fuzzy_aliases[canonical]),
-            reverse=True,
-        )
+        ranked = []
+        for canonical in candidates:
+            for alias in self._fuzzy_aliases[canonical]:
+                if not _shares_token_prefix(tokens, alias.split()):
+                    continue
+                ranked.append((SequenceMatcher(None, normalized, alias).ratio(), canonical))
+        ranked.sort(reverse=True)
         if not ranked:
             return None
         best_score, best_canonical = ranked[0]
@@ -157,3 +159,12 @@ class DerbyMatcher:
     @property
     def pair_count(self) -> int:
         return len(self._pairs)
+
+
+def _shares_token_prefix(left: list[str], right: list[str]) -> bool:
+    return any(
+        first == second
+        or (len(first) >= 3 and len(second) >= 3 and first[:3] == second[:3])
+        for first in left
+        for second in right
+    )

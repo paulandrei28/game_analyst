@@ -104,7 +104,7 @@ class HumanReadableReport:
         bonuses = prediction.get("bonuses", [])
         if bonuses:
             lines.extend(["", "**Why the prediction is strengthened**"])
-            lines.extend(f"- {self._clean_bonus(item)}" for item in bonuses)
+            lines.extend(f"- {item}" for item in bonuses)
 
         penalties = prediction.get("penalties", [])
         if penalties:
@@ -138,23 +138,15 @@ class HumanReadableReport:
         for item in evidence:
             grouped[item.get("section", "unknown")].append(item)
 
+        known_sections = tuple(self.SECTION_LABELS)
+        sections = [
+            *known_sections,
+            *(section for section in grouped if section not in self.SECTION_LABELS),
+        ]
         lines: list[str] = []
-        for section in ("general", "head2head"):
+        for section in sections:
             items = grouped.get(section, [])
             if not items:
-                continue
-
-            label = self.SECTION_LABELS.get(section, section.replace("_", " ").title())
-            lines.append(f"- **{label}:**")
-            for item in items:
-                team = self._team_label(item.get("team"), home=home, away=away)
-                name = item.get("name", "Evidence")
-                value = item.get("value", "?")
-                lines.append(f"  - {team}{name}: **{value}**")
-
-        # Preserve any future/unknown evidence sections instead of dropping them.
-        for section, items in grouped.items():
-            if section in {"general", "head2head"}:
                 continue
             label = self.SECTION_LABELS.get(section, section.replace("_", " ").title())
             lines.append(f"- **{label}:**")
@@ -175,12 +167,6 @@ class HumanReadableReport:
         if team == "both":
             return "Both — "
         return ""
-
-    @staticmethod
-    def _clean_bonus(text: str) -> str:
-        # The analyzer already produces useful relationship descriptions;
-        # only normalize the arrow glyph for plain-text/Markdown portability.
-        return text.replace("→", "→")
 
     def save(
         self,

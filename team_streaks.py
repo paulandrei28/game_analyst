@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from pathlib import Path
@@ -7,10 +8,16 @@ from typing import Any, Callable
 
 try:
     from .sofascore_client import SofascoreClient
-    from .sofascore_statistics import enrich_qualifying_team_statistics
+    from .sofascore_statistics import (
+        enrich_qualifying_team_statistics,
+        team_statistics_request_keys,
+    )
 except ImportError:  # pragma: no cover
     from sofascore_client import SofascoreClient
-    from sofascore_statistics import enrich_qualifying_team_statistics
+    from sofascore_statistics import (
+        enrich_qualifying_team_statistics,
+        team_statistics_request_keys,
+    )
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,7 +121,7 @@ async def fetch_team_match_data(
     )
 
     async with client:
-        qualifying_games: set[str] = set()
+        statistics_tasks: dict[tuple[str, str, str, str], Any] = {}
         for game in fixture_list:
             teams = _game_teams(game)
             if teams is None:
@@ -151,6 +158,25 @@ async def fetch_team_match_data(
                         "referee": None,
                         "odds": None,
                     }
+                    # Start team-stat requests as soon as this match's IDs are
+                    # known; they can run while the next fixtures are searched.
+                    _, team_statistic_keys = team_statistics_request_keys(context)
+                    for request_key in set(team_statistic_keys.values()):
+                        cache_key = (
+                            str(request_key[0]),
+                            str(request_key[1]),
+                            str(request_key[2]),
+                            request_key[3],
+                        )
+                        if cache_key not in statistics_tasks:
+                            statistics_tasks[cache_key] = asyncio.create_task(
+                                client.fetch_team_statistics(
+                                    request_key[0],
+                                    request_key[1],
+                                    request_key[2],
+                                    statistics_type=request_key[3],
+                                )
+                            )
                     try:
                         context["odds"] = await client.fetch("event_odds_1x2", event_id=event_id)
                         if context["odds"] is None:
@@ -162,7 +188,6 @@ async def fetch_team_match_data(
                     # before requesting referee or historical discipline data.
                     eligible = worth_watching_qualifier(display_key, context) if worth_watching_qualifier else True
                     if eligible:
-                        qualifying_games.add(display_key)
                         try:
                             context["referee"] = await client.fetch_match_referee(
                                 event_id,
@@ -185,9 +210,13 @@ async def fetch_team_match_data(
             except Exception:
                 LOGGER.exception("Could not retrieve match data for %s", display_key)
 
-        if include_context and qualifying_games:
+        # Team statistics are needed to discover high-discipline-risk games,
+        # so enrich every fixture context before applying the final OR filter.
+        if include_context and contexts:
             try:
-                await enrich_qualifying_team_statistics(client, contexts, qualifying_games)
+                if statistics_tasks:
+                    await asyncio.gather(*statistics_tasks.values(), return_exceptions=True)
+                await enrich_qualifying_team_statistics(client, contexts, set(contexts))
             except Exception:
                 LOGGER.warning("Could not enrich team-season disciplinary statistics", exc_info=True)
 

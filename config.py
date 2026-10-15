@@ -48,7 +48,7 @@ class AppConfig:
     sofascore_request_backoff_base_seconds: float = 3.0
     sofascore_request_max_retries: int = 4
     referee_card_bonus: float = 5.0
-    referee_card_penalty: float = 5.0
+    referee_card_penalty: float = 10.0
 
     @property
     def allowed_league_ids(self) -> set[int]:
@@ -88,7 +88,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     if prediction_threshold is not None and prediction_threshold < 0:
         raise ValueError("analysis.prediction_threshold must be non-negative")
     referee_card_bonus = float(analysis.get("referee_card_bonus", 5.0))
-    referee_card_penalty = float(analysis.get("referee_card_penalty", 5.0))
+    referee_card_penalty = float(analysis.get("referee_card_penalty", 10.0))
     if (
         not math.isfinite(referee_card_bonus)
         or not math.isfinite(referee_card_penalty)

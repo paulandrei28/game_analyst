@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from match_context import build_worth_watching, classify_risk, valid_competitive_odds
+from match_context import build_worth_watching, classify_risk, qualifies_for_worth_watching
 
 
 def raw_context(*, referee_yellows=500, referee_reds=10, competition_yellows=100,
@@ -40,15 +40,11 @@ def raw_context(*, referee_yellows=500, referee_reds=10, competition_yellows=100
 
 
 class MatchContextTests(unittest.TestCase):
-    def test_competitive_odds_filter_and_numeric_values(self):
-        context = raw_context(odds=(2.7, 3.0, 2.8))
-        self.assertEqual(valid_competitive_odds(context), {"home_win": 2.7, "draw": 3.0, "away_win": 2.8})
-        self.assertIsNone(valid_competitive_odds(raw_context(odds=(1.59, 4.0, 5.0))))
-        self.assertIsNone(valid_competitive_odds(raw_context(odds=(1.8, 3.9, 4.0))))
-        self.assertIsNone(valid_competitive_odds(raw_context(odds=(2.0, 3.0))))
-        self.assertIsNone(valid_competitive_odds(raw_context(odds=("bad", 3.0, 3.2))))
-        self.assertEqual(valid_competitive_odds(raw_context(odds=(1.9, 20.0, 30.0))),
-                         {"home_win": 1.9, "draw": 20.0, "away_win": 30.0})
+    def test_odds_filter_uses_only_home_above_1_9_and_no_higher_than_away(self):
+        self.assertTrue(qualifies_for_worth_watching(raw_context(odds=(2.7, 3.0, 2.8))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(1.9, 3.0, 4.0))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(2.0, 3.0, 1.9))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(2.0, 3.0))))
 
     def test_classification_boundaries_and_compact_filtered_object(self):
         self.assertEqual([classify_risk(v) for v in (39, 40, 64, 65)],
@@ -59,14 +55,14 @@ class MatchContextTests(unittest.TestCase):
                                       {game: {"id": 123, "name": "UEFA Champions League"}},
                                       {game: False})
         self.assertEqual(result[game]["league"], {"id": 123, "name": "UEFA Champions League"})
-        self.assertEqual(result[game]["odds"]["home_win"], 2.7)
+        self.assertEqual(result[game]["odds"], {"home_win": 2.7, "draw": 3.0, "away_win": 2.8})
         self.assertEqual(set(result[game]["stats"]), {
-            "penalty_probability", "red_card_probability", "yellow_card_probability",
+            "penalty_probability", "red_card_probability",
             "high_yellow_card_tendency"})
         self.assertEqual(result[game]["stats"]["penalty_probability"], "insufficient_data")
         self.assertIsNone(result[game]["stats"]["high_yellow_card_tendency"])
         self.assertFalse(result[game]["derby"])
-        self.assertEqual(result[game]["risk_scores"]["penalty"], None)
+        self.assertEqual(set(result[game]), {"league", "odds", "derby", "stats"})
         stats_context = deepcopy(raw_context())
         stats_context.update({
             "team_statistics": {
@@ -90,8 +86,7 @@ class MatchContextTests(unittest.TestCase):
             {game: stats_context},
             {game: {"id": 123, "name": "UEFA Champions League", "season": 2026}},
             {game: False})
-        self.assertIsNotNone(combined[game]["risk_scores"]["yellow_card"])
-        self.assertTrue(combined[game]["evidence_coverage"]["yellow_card"]["teams"])
+        self.assertTrue(combined[game]["stats"]["high_yellow_card_tendency"])
         self.assertEqual(build_worth_watching({game: raw_context(odds=(1.4, 5, 6))},
                                               {game: {"id": 1, "name": "L"}}, {}), {})
         derby_result = build_worth_watching(
@@ -99,6 +94,46 @@ class MatchContextTests(unittest.TestCase):
             {game: {"id": 123, "name": "League"}}, {game: True})
         self.assertIn(game, derby_result)
         self.assertTrue(derby_result[game]["derby"])
+
+    def test_high_team_discipline_risk_is_independent_of_odds_and_derby(self):
+        game = "Roma - Real Madrid"
+        context = raw_context(odds=(1.5, 4.0, 8.0))
+        context["team_statistics"] = {
+            "home": {"matches": 100, "yellow_cards_per_match": 8.0,
+                     "red_cards_per_match": 0.25, "penalties_per_match": 0.30},
+            "away": {"matches": 100, "yellow_cards_per_match": 8.0,
+                     "red_cards_per_match": 0.25, "penalties_per_match": 0.30},
+        }
+        context["competition_statistics_baseline"] = {
+            "yellow_cards_per_match": 5.0, "red_cards_per_match": 0.15,
+            "penalties_per_match": 0.20,
+        }
+        result = build_worth_watching(
+            {game: context}, {game: {"id": 1, "name": "League"}}, {game: False}
+        )
+        self.assertIn(game, result)
+        self.assertTrue(result[game]["stats"]["high_yellow_card_tendency"])
+
+    def test_team_only_discipline_estimates_are_retained_at_lower_risk(self):
+        game = "Roma - Real Madrid"
+        context = raw_context(odds=(2.0, 3.5, 2.2), referee=False)
+        context["team_statistics"] = {
+            "home": {"matches": 100, "yellow_cards_per_match": 8.0,
+                     "red_cards_per_match": 0.25, "penalties_per_match": 0.30},
+            "away": {"matches": 100, "yellow_cards_per_match": 8.0,
+                     "red_cards_per_match": 0.25, "penalties_per_match": 0.30},
+        }
+        context["competition_statistics_baseline"] = {
+            "yellow_cards_per_match": 5.0, "red_cards_per_match": 0.15,
+            "penalties_per_match": 0.20,
+        }
+        result = build_worth_watching(
+            {game: context}, {game: {"id": 1, "name": "League"}}, {game: False}
+        )
+        self.assertIn(game, result)
+        self.assertNotEqual(result[game]["stats"]["penalty_probability"], "insufficient_data")
+        self.assertNotEqual(result[game]["stats"]["red_card_probability"], "insufficient_data")
+        self.assertFalse(result[game]["stats"]["high_yellow_card_tendency"])
 
 
 if __name__ == "__main__":

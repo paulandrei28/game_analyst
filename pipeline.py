@@ -56,27 +56,28 @@ async def run_pipeline(
 
     streaks = _load_cached_streaks(streaks_path)
     match_context = _load_cached_json(context_path)
+    fixture_games: list[str] | None = None
     if streaks is None:
         # League metadata is cached independently so the historical streak
         # cache remains its original game-to-stats mapping.
-        games, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
+        fixture_games, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
             date_option,
             output_dir=output_root,
             allowed_league_ids=settings.allowed_league_ids,
             api_timeout_seconds=settings.api_timeout_seconds,
         )
-        LOGGER.info("Fixture metadata contains %d games", len(games))
+        LOGGER.info("Fixture metadata contains %d games", len(fixture_games))
         LOGGER.info(
             "No valid team streak cache for %s; collecting fresh data",
             date_option,
         )
-        LOGGER.info("Scraper returned %d games", len(games))
-        if not games:
+        LOGGER.info("Scraper returned %d games", len(fixture_games))
+        if not fixture_games:
             raise RuntimeError("No fixtures found; stopping the pipeline")
 
         LOGGER.info("Fetching team streaks from SofaScore")
         streaks, match_context = await fetch_team_match_data(
-            games,
+            fixture_games,
             target_date=target_date,
             request_interval=settings.sofascore_request_interval_seconds,
             request_jitter=settings.sofascore_request_jitter_seconds,
@@ -97,7 +98,7 @@ async def run_pipeline(
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
         try:
-            _, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
+            fixture_games, fixture_metadata, _ = load_or_fetch_fixtures_with_metadata(
                 date_option,
                 output_dir=output_root,
                 allowed_league_ids=settings.allowed_league_ids,
@@ -115,15 +116,16 @@ async def run_pipeline(
 
         if match_context is None:
             try:
-                games, _, _ = load_or_fetch_fixtures_with_metadata(
-                    date_option,
-                    output_dir=output_root,
-                    allowed_league_ids=settings.allowed_league_ids,
-                    api_timeout_seconds=settings.api_timeout_seconds,
-                )
-                if games:
+                if fixture_games is None:
+                    fixture_games, _, _ = load_or_fetch_fixtures_with_metadata(
+                        date_option,
+                        output_dir=output_root,
+                        allowed_league_ids=settings.allowed_league_ids,
+                        api_timeout_seconds=settings.api_timeout_seconds,
+                    )
+                if fixture_games:
                     _, match_context = await fetch_team_match_data(
-                        games,
+                        fixture_games,
                         target_date=target_date,
                         include_streaks=False,
                         include_context=True,
@@ -152,15 +154,13 @@ async def run_pipeline(
         game: derby_matcher.is_derby(*_split_match(game))
         for game in (match_context or {})
     }
-    qualifying_games = [
-        game for game, context in (match_context or {}).items()
-        if game in fixture_metadata
-        and qualifies_for_worth_watching(context, derby=derby_by_game.get(game, False))
-    ]
-    if any(_missing_team_statistics((match_context or {}).get(game)) for game in qualifying_games):
+    statistic_games = {
+        game for game in (match_context or {}) if game in fixture_metadata
+    }
+    if any(_missing_team_statistics((match_context or {}).get(game)) for game in statistic_games):
         await enrich_cached_team_statistics(
             match_context or {},
-            set(qualifying_games),
+            statistic_games,
             statistics_cache_dir=output_root / "sofascore_statistics",
             request_interval=settings.sofascore_request_interval_seconds,
             request_jitter=settings.sofascore_request_jitter_seconds,

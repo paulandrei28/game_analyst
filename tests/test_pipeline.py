@@ -76,7 +76,9 @@ class PipelineTests(unittest.TestCase):
 
             fetch.assert_not_awaited()
             generator.generate.assert_called_once_with(
-                {"A - B": {}}, prediction_threshold=None, match_context={}
+                {"A - B": {}},
+                prediction_threshold=pipeline.load_config().prediction_threshold,
+                match_context={},
             )
             generator.save_json.assert_called_once_with(payload, artifacts["analysis"])
             self.assertEqual(

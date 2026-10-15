@@ -1,11 +1,16 @@
-import logging
 import json
+import logging
 import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
 from web_export import archive_oldest_report, export_reports
+
+try:
+    from .runner_support import publish_pages_repository, run_logged
+except ImportError:  # pragma: no cover
+    from runner_support import publish_pages_repository, run_logged
 
 PROJECT_DIR = Path(__file__).resolve().parent
 BETMAN_DIR = PROJECT_DIR.parent / "betman"
@@ -34,30 +39,10 @@ def _run_logged(
     cwd: Path,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-
-    for line in result.stdout.splitlines():
-        logger.info("[%s] %s", command[0], line)
-    for line in result.stderr.splitlines():
-        logger.error("[%s] %s", command[0], line)
-
-    if check and result.returncode:
-        raise subprocess.CalledProcessError(
-            result.returncode,
-            result.args,
-            output=result.stdout,
-            stderr=result.stderr,
-        )
-    return result
+    return run_logged(command, cwd=cwd, logger=logger, check=check)
 
 
-def _put_pc_to_sleep():
-
+def _put_pc_to_sleep() -> None:
     subprocess.run(
         [
             "powershell.exe",
@@ -75,37 +60,10 @@ def _put_pc_to_sleep():
 
 
 def _publish_pages_repository() -> None:
-    if not (BETMAN_DIR / ".git").is_dir():
-        raise RuntimeError(
-            f"Pages repository was not found at {BETMAN_DIR}. "
-            "Place the betman checkout beside game_analyst."
-        )
-
-    _run_logged(["git", "add", "data"], cwd=BETMAN_DIR)
-    commit = _run_logged(
-        ["git", "commit", "-m", "daily report update"],
-        cwd=BETMAN_DIR,
-        check=False,
-    )
-    if commit.returncode not in (0, 1):
-        raise subprocess.CalledProcessError(
-            commit.returncode,
-            commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
-        )
-    if commit.returncode == 1 and "nothing to commit" not in commit.stdout.lower():
-        raise subprocess.CalledProcessError(
-            commit.returncode,
-            commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
-        )
-
-    _run_logged(["git", "push", "origin", "main"], cwd=BETMAN_DIR)
+    publish_pages_repository(BETMAN_DIR, _run_logged)
 
 
-def main():
+def main() -> None:
     logger.info("Nightly runner started; waiting 10 minutes for system connections.")
     time.sleep(10 * 60)
     logger.info("Startup buffer complete.")
