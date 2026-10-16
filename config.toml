@@ -110,6 +110,8 @@ belgian-cup = 147
 super-lig = 203
 
 [sofascore]
+# Active search-work budget; intentional pacing waits are excluded (3x wall cap).
+search_timeout_seconds = 120.0
 request_interval_seconds = 5.0
 request_jitter_seconds = 5.0
 request_burst_size = 5

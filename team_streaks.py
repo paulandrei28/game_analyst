@@ -106,6 +106,7 @@ async def fetch_team_match_data(
     request_burst_pause: float = 12.0,
     request_backoff_base: float = 3.0,
     request_max_retries: int = 4,
+    search_timeout_seconds: float = 120.0,
     initial_streaks: dict[str, Any] | None = None,
     initial_contexts: dict[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any], dict[str, Any]], None] | None = None,
@@ -127,6 +128,7 @@ async def fetch_team_match_data(
         request_burst_pause=request_burst_pause,
         request_backoff_base=request_backoff_base,
         request_max_retries=request_max_retries,
+        search_timeout_seconds=search_timeout_seconds,
         statistics_cache_dir=statistics_cache_dir,
     )
 

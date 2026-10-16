@@ -75,6 +75,7 @@ class TeamStreaksTests(unittest.TestCase):
 
         client_factory.assert_called_once_with(
             **settings,
+            search_timeout_seconds=120.0,
             statistics_cache_dir=None,
         )
 

@@ -107,6 +107,7 @@ premier-league = 39
 laliga = 140
 
 [sofascore]
+search_timeout_seconds = 120.0
 request_interval_seconds = 5.0
 request_jitter_seconds = 5.0
 request_burst_size = 5
@@ -118,6 +119,13 @@ request_max_retries = 2
 `prediction_threshold` excludes predictions below the specified computed
 prediction value. `enabled_markets` limits the categories included in ranking.
 If it is omitted, all supported categories are enabled.
+
+`search_timeout_seconds` bounds active work in an individual UI search and the
+complete fixture lookup, including its schedule check and progressive search
+fallback. Intentional rate-limit and UI pacing waits do not use up this budget;
+a three-times wall-clock cap still prevents an indefinitely delayed lookup. A
+timeout logs a warning and skips that search or fixture so collection can
+continue.
 
 ## Output
 

@@ -47,6 +47,7 @@ class AppConfig:
     sofascore_request_burst_pause_seconds: float = 12.0
     sofascore_request_backoff_base_seconds: float = 3.0
     sofascore_request_max_retries: int = 4
+    sofascore_search_timeout_seconds: float = 120.0
     referee_card_bonus: float = 5.0
     referee_card_penalty: float = 10.0
 
@@ -116,6 +117,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     request_burst_pause = float(sofascore.get("request_burst_pause_seconds", 12.0))
     request_backoff_base = float(sofascore.get("request_backoff_base_seconds", 3.0))
     request_max_retries = int(sofascore.get("request_max_retries", 4))
+    search_timeout = float(sofascore.get("search_timeout_seconds", 120.0))
     if (
         api_timeout <= 0
         or request_interval < 0
@@ -124,9 +126,11 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         or request_burst_pause < 0
         or request_backoff_base <= 0
         or request_max_retries < 0
+        or not math.isfinite(search_timeout)
+        or search_timeout <= 0
     ):
         raise ValueError(
-            "API timeout must be positive and request pacing settings must be non-negative"
+            "API and SofaScore search timeouts must be positive and request pacing settings must be non-negative"
         )
 
     return AppConfig(
@@ -145,4 +149,5 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         sofascore_request_burst_pause_seconds=request_burst_pause,
         sofascore_request_backoff_base_seconds=request_backoff_base,
         sofascore_request_max_retries=request_max_retries,
+        sofascore_search_timeout_seconds=search_timeout,
     )

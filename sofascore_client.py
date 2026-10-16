@@ -8,12 +8,13 @@ import random
 import re
 import time
 import unicodedata
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, TypeVar
 from urllib.parse import urlparse
 
 from playwright.async_api import (
@@ -29,6 +30,88 @@ LOGGER = logging.getLogger(__name__)
 SOFASCORE_BASE_URL = "https://www.sofascore.com"
 SOFASCORE_API_PREFIX = "/api/v1"
 SOFASCORE_FOOTBALL_URL = f"{SOFASCORE_BASE_URL}/football"
+
+
+class _SearchDeadline:
+    """Active-work deadline that can pause for intentional pacing waits."""
+
+    def __init__(self, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        self.loop = loop
+        self.deadline = loop.time() + timeout_seconds
+        self.max_deadline = loop.time() + timeout_seconds * 3
+        self.changed = asyncio.Event()
+
+    def exclude_pacing_wait(self, seconds: float) -> None:
+        if seconds <= 0:
+            return
+        self.deadline = min(
+            max(self.deadline, self.loop.time()) + seconds,
+            self.max_deadline,
+        )
+        self.changed.set()
+
+
+_ACTIVE_SEARCH_DEADLINES: ContextVar[tuple[_SearchDeadline, ...]] = ContextVar(
+    "active_sofascore_search_deadlines",
+    default=(),
+)
+_T = TypeVar("_T")
+
+
+async def _pacing_sleep(seconds: float) -> None:
+    """Sleep for intentional pacing without charging active search budgets."""
+    for deadline in _ACTIVE_SEARCH_DEADLINES.get():
+        deadline.exclude_pacing_wait(seconds)
+    await asyncio.sleep(seconds)
+
+
+async def _wait_for_search_work(
+    awaitable: Awaitable[_T], timeout_seconds: float
+) -> _T:
+    """Bound active search work while allowing pacing sleeps a finite grace."""
+    loop = asyncio.get_running_loop()
+    deadline = _SearchDeadline(timeout_seconds)
+    token = _ACTIVE_SEARCH_DEADLINES.set(
+        (*_ACTIVE_SEARCH_DEADLINES.get(), deadline)
+    )
+    task = asyncio.ensure_future(awaitable)
+    try:
+        while not task.done():
+            deadline.changed.clear()
+            remaining = deadline.deadline - loop.time()
+            if remaining <= 0:
+                break
+
+            changed_task = asyncio.create_task(deadline.changed.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    (task, changed_task),
+                    timeout=remaining,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                if not changed_task.done():
+                    changed_task.cancel()
+                await asyncio.gather(changed_task, return_exceptions=True)
+
+            if task in done:
+                return task.result()
+            if deadline.deadline <= loop.time():
+                break
+
+        if task.done():
+            return task.result()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise asyncio.TimeoutError
+    except BaseException:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+    finally:
+        _ACTIVE_SEARCH_DEADLINES.reset(token)
 
 
 @dataclass(frozen=True)
@@ -134,6 +217,33 @@ class SofascoreSearcher:
         max_results: int | None = None,
         ensure_search_page: bool = True,
     ) -> list[SofascoreSearchResult]:
+        """Search SofaScore, returning no results if the UI exceeds its deadline."""
+        try:
+            return await _wait_for_search_work(
+                self._search(
+                    query,
+                    kind=kind,
+                    max_results=max_results,
+                    ensure_search_page=ensure_search_page,
+                ),
+                self.client.search_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            LOGGER.warning(
+                "SofaScore search for %r exceeded its %.1fs active-work timeout or 3x elapsed-time cap; continuing without results",
+                query,
+                self.client.search_timeout_seconds,
+            )
+            return []
+
+    async def _search(
+        self,
+        query: str,
+        *,
+        kind: str | None = None,
+        max_results: int | None = None,
+        ensure_search_page: bool = True,
+    ) -> list[SofascoreSearchResult]:
         """Search SofaScore and return typed results from the visible modal."""
         query = " ".join(str(query).split())
         if not query:
@@ -229,6 +339,32 @@ class SofascoreSearcher:
     _RESERVE_MARKERS = {"ii", "2", "reserve", "b"}
 
     async def find_game(
+        self,
+        home_team: str,
+        away_team: str,
+        *,
+        target_date: str | date | None = None,
+    ) -> SofascoreSearchResult | None:
+        """Run progressive lookup with a total deadline for all query variants."""
+        try:
+            return await _wait_for_search_work(
+                self._find_game(
+                    home_team,
+                    away_team,
+                    target_date=target_date,
+                ),
+                self.client.search_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            LOGGER.warning(
+                "SofaScore match search for %s - %s exceeded its %.1fs active-work timeout or 3x elapsed-time cap; skipping this fixture",
+                home_team,
+                away_team,
+                self.client.search_timeout_seconds,
+            )
+            return None
+
+    async def _find_game(
         self,
         home_team: str,
         away_team: str,
@@ -1028,13 +1164,13 @@ class SofascoreSearcher:
                 "Sleeping %.2fs before next SofaScore search",
                 sleep_for,
             )
-            await asyncio.sleep(sleep_for)
+            await _pacing_sleep(sleep_for)
         self._last_search_at = loop.time()
 
     async def _sleep_random(self, label: str, minimum: float, maximum: float) -> None:
         delay = random.uniform(minimum, maximum)
         LOGGER.debug("%s: %.2fs", label, delay)
-        await asyncio.sleep(delay)
+        await _pacing_sleep(delay)
 
 
 RESOURCE_SPECS: dict[str, ResourceSpec] = {
@@ -1136,6 +1272,7 @@ class SofascoreClient:
         request_burst_pause: float = 12.0,
         request_backoff_base: float = 3.0,
         request_max_retries: int = 4,
+        search_timeout_seconds: float = 120.0,
         browser_channel: str = "chrome",
         headless: bool = False,
         startup_delay_min: float = 3.0,
@@ -1150,6 +1287,9 @@ class SofascoreClient:
         self.request_burst_pause = max(0.0, request_burst_pause)
         self.request_backoff_base = max(0.1, request_backoff_base)
         self.request_max_retries = max(0, request_max_retries)
+        if not math.isfinite(search_timeout_seconds) or search_timeout_seconds <= 0:
+            raise ValueError("search_timeout_seconds must be positive and finite")
+        self.search_timeout_seconds = float(search_timeout_seconds)
         self.browser_channel = browser_channel
         self.headless = headless
         self.startup_delay_min = max(0.0, startup_delay_min)
@@ -1366,7 +1506,7 @@ class SofascoreClient:
             loop = asyncio.get_running_loop()
             cooldown = max(0.0, cooldown_until - loop.time())
             if cooldown:
-                await asyncio.sleep(cooldown)
+                await _pacing_sleep(cooldown)
             return
 
         loop = asyncio.get_running_loop()
@@ -1395,7 +1535,7 @@ class SofascoreClient:
                 elapsed,
                 target_delay,
             )
-            await asyncio.sleep(sleep_for)
+            await _pacing_sleep(sleep_for)
 
     async def _backoff(
         self,
@@ -1426,7 +1566,7 @@ class SofascoreClient:
             self.request_max_retries + 1,
         )
         if retry and sleep_for:
-            await asyncio.sleep(sleep_for)
+            await _pacing_sleep(sleep_for)
 
     @staticmethod
     def _retry_after_seconds(value: str | None) -> float | None:
@@ -1489,6 +1629,34 @@ class SofascoreClient:
         return self._match_index
 
     async def resolve_event_by_match_name(
+        self,
+        home_team: str,
+        away_team: str,
+        *,
+        target_date: str | date | None = None,
+        force_reindex: bool = False,
+    ) -> dict[str, Any] | None:
+        """Resolve one fixture within the configured search deadline."""
+        try:
+            return await _wait_for_search_work(
+                self._resolve_event_by_match_name(
+                    home_team,
+                    away_team,
+                    target_date=target_date,
+                    force_reindex=force_reindex,
+                ),
+                self.search_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            LOGGER.warning(
+                "SofaScore fixture lookup for %s - %s exceeded its %.1fs active-work timeout or 3x elapsed-time cap; skipping this fixture",
+                home_team,
+                away_team,
+                self.search_timeout_seconds,
+            )
+            return None
+
+    async def _resolve_event_by_match_name(
         self,
         home_team: str,
         away_team: str,

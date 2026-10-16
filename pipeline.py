@@ -103,6 +103,7 @@ async def run_pipeline(
             request_burst_pause=settings.sofascore_request_burst_pause_seconds,
             request_backoff_base=settings.sofascore_request_backoff_base_seconds,
             request_max_retries=settings.sofascore_request_max_retries,
+            search_timeout_seconds=settings.sofascore_search_timeout_seconds,
             statistics_cache_dir=output_root / "sofascore_statistics",
             worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
                 game, context, fixture_metadata, derby_matcher
@@ -173,6 +174,7 @@ async def run_pipeline(
                         request_burst_pause=settings.sofascore_request_burst_pause_seconds,
                         request_backoff_base=settings.sofascore_request_backoff_base_seconds,
                         request_max_retries=settings.sofascore_request_max_retries,
+                        search_timeout_seconds=settings.sofascore_search_timeout_seconds,
                         statistics_cache_dir=output_root / "sofascore_statistics",
                         worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
                             game, context, fixture_metadata, derby_matcher

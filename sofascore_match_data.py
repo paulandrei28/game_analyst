@@ -222,6 +222,7 @@ async def run(home: str, away: str, target_date: date) -> int:
         request_burst_pause=settings.sofascore_request_burst_pause_seconds,
         request_backoff_base=settings.sofascore_request_backoff_base_seconds,
         request_max_retries=settings.sofascore_request_max_retries,
+        search_timeout_seconds=settings.sofascore_search_timeout_seconds,
     )
     try:
         async with client:
