@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import json
+import math
 import random
 import re
 import time
@@ -10,6 +11,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -143,7 +145,9 @@ class SofascoreSearcher:
             )
 
         async with self.client._browser_lock:
+            self.client._raise_if_blocked()
             await self._wait_for_search_slot()
+            self.client._raise_if_blocked()
             if ensure_search_page:
                 await self._ensure_search_page()
             await self._open_search()
@@ -233,6 +237,7 @@ class SofascoreSearcher:
     ) -> SofascoreSearchResult | None:
         """Search progressively and return the game for ``target_date`` when supplied."""
         requested_date = self.client._coerce_date(target_date)
+        self.client._raise_if_blocked()
         queries = self._build_game_search_queries(home_team, away_team)
         fallback: SofascoreSearchResult | None = None
 
@@ -251,6 +256,11 @@ class SofascoreSearcher:
                 # query. If that result is not the requested fixture, relax the
                 # query and try again instead of scanning a large result set.
                 results = await self.games(query, max_results=1)
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.exception("SofaScore game search failed for query %r", query)
+                continue
             except Exception:
                 LOGGER.exception("SofaScore game search failed for query %r", query)
                 continue
@@ -333,14 +343,41 @@ class SofascoreSearcher:
         # Preserve the exact fixture names as the first query.
         add(str(home_team), str(away_team))
 
-        # Normalized / suffix-stripped forms come next.
-        for index in range(min(3, max(len(home_variants), len(away_variants)))):
-            if not home_variants or not away_variants:
-                break
-            add(
-                home_variants[min(index, len(home_variants) - 1)],
-                away_variants[min(index, len(away_variants) - 1)],
-            )
+        # Start relaxing the longer name first. A distinctive token from a
+        # long club name is often enough for SofaScore to find the fixture;
+        # if it is not, progressively add the other useful name tokens back.
+        # This avoids spending several searches on increasingly short suffixes.
+        home_normalized = cls.client_normalize_team_name(home_team)
+        away_normalized = cls.client_normalize_team_name(away_team)
+        longer_is_home = (len(home_normalized), len(home_normalized.split())) >= (
+            len(away_normalized),
+            len(away_normalized.split()),
+        )
+        long_team, short_team = (
+            (home_team, away_team) if longer_is_home else (away_team, home_team)
+        )
+        long_build_up = cls._team_build_up_variants(long_team)
+        short_anchor = cls._team_anchor(short_team)
+        for long_name in long_build_up[:4]:
+            if longer_is_home:
+                add(long_name, short_anchor)
+            else:
+                add(short_anchor, long_name)
+
+        # If relaxing the longer name did not work, try a distinctive token
+        # from the shorter name while restoring the longer name in full.
+        long_anchor = cls._team_anchor(long_team)
+        for short_name in cls._team_build_up_variants(short_team)[:2]:
+            if longer_is_home:
+                add(long_anchor, short_name)
+            else:
+                add(short_name, long_anchor)
+
+        # Also try a clean, suffix-stripped pair before the single-token
+        # cross-product fallbacks below.
+        clean_home = home_variants[1] if len(home_variants) > 1 else home_team
+        clean_away = away_variants[1] if len(away_variants) > 1 else away_team
+        add(clean_home, clean_away)
 
         # Pair meaningful single-token variants. This is what turns cases such
         # as ``Olympic Charleroi`` + ``Habay-la-Neuve`` into ``Charleroi Habay``
@@ -364,6 +401,40 @@ class SofascoreSearcher:
                 return queries
 
         return queries
+
+    @classmethod
+    def _team_anchor(cls, value: str) -> str:
+        """Return the most distinctive searchable token from a team name."""
+        tokens = cls._meaningful_team_tokens(value)
+        return tokens[0] if tokens else cls.client_normalize_team_name(value)
+
+    @classmethod
+    def _team_build_up_variants(cls, value: str) -> list[str]:
+        """Build a team query from its strongest token by adding useful words."""
+        normalized = cls.client_normalize_team_name(value)
+        tokens = [
+            token
+            for token in normalized.split()
+            if token not in cls._GENERIC_TEAM_SUFFIXES
+            and token not in cls._RESERVE_MARKERS
+        ]
+        meaningful = [token for token in tokens if len(token) >= 4]
+        if not meaningful:
+            return [normalized] if normalized else []
+
+        # Add the longest, most identifying terms first, then retain source
+        # order inside each candidate. This handles long names with a generic
+        # prefix and distinctive final club name without hardcoded aliases.
+        ranked = sorted(meaningful, key=lambda token: (-len(token), tokens.index(token)))
+        variants: list[str] = []
+        for count in range(1, len(ranked) + 1):
+            selected = set(ranked[:count])
+            candidate = " ".join(token for token in tokens if token in selected)
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+        if normalized and normalized not in variants:
+            variants.append(normalized)
+        return variants
 
     @classmethod
     def _meaningful_team_tokens(cls, value: str) -> list[str]:
@@ -461,6 +532,15 @@ class SofascoreSearcher:
         if event_id not in self._game_details_cache:
             try:
                 details = await self.client.fetch("event", event_id=event_id)
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.warning(
+                    "Could not inspect SofaScore event date for event %s: %s",
+                    event_id,
+                    exc,
+                )
+                details = None
             except Exception as exc:
                 LOGGER.warning(
                     "Could not inspect SofaScore event date for event %s: %s",
@@ -929,20 +1009,27 @@ class SofascoreSearcher:
         return None
 
     async def _wait_for_search_slot(self) -> None:
-        now = asyncio.get_running_loop().time()
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        search_ready_at = now
         if self._last_search_at is not None:
-            elapsed = now - self._last_search_at
             target = self.search_interval_min + random.uniform(
                 0.0, self.search_interval_jitter
             )
-            sleep_for = max(0.0, target - elapsed)
-            if sleep_for > 0:
-                LOGGER.debug(
-                    "Sleeping %.2fs before next SofaScore search",
-                    sleep_for,
-                )
-                await asyncio.sleep(sleep_for)
-        self._last_search_at = asyncio.get_running_loop().time()
+            search_ready_at = self._last_search_at + target
+        while True:
+            sleep_for = max(
+                search_ready_at,
+                self.client._cooldown_until,
+            ) - loop.time()
+            if sleep_for <= 0:
+                break
+            LOGGER.debug(
+                "Sleeping %.2fs before next SofaScore search",
+                sleep_for,
+            )
+            await asyncio.sleep(sleep_for)
+        self._last_search_at = loop.time()
 
     async def _sleep_random(self, label: str, minimum: float, maximum: float) -> None:
         delay = random.uniform(minimum, maximum)
@@ -1078,10 +1165,14 @@ class SofascoreClient:
         self._page: Page | None = None
         self._last_request_at: float | None = None
         self._request_count = 0
+        self._cooldown_until = 0.0
+        self._blocked_error: SofascoreHTTPError | None = None
         self._browser_lock = asyncio.Lock()
         self._api_request_lock = asyncio.Lock()
         self._match_index_loaded = False
         self._match_index: list[dict[str, Any]] = []
+        self._scheduled_events_cache: dict[tuple[str, str, bool], dict[str, Any]] = {}
+        self._scheduled_events_errors: dict[tuple[str, str, bool], Exception] = {}
         self.searcher = SofascoreSearcher(self)
 
     async def __aenter__(self) -> "SofascoreClient":
@@ -1139,8 +1230,12 @@ class SofascoreClient:
         self._playwright = None
         self._last_request_at = None
         self._request_count = 0
+        self._cooldown_until = 0.0
+        self._blocked_error = None
         self._match_index_loaded = False
         self._match_index.clear()
+        self._scheduled_events_cache.clear()
+        self._scheduled_events_errors.clear()
 
     @staticmethod
     def normalize_resource_name(resource: str) -> str:
@@ -1177,6 +1272,7 @@ class SofascoreClient:
 
     async def _fetch_path_locked(self, path: str) -> Any:
         """Perform one rate-limited API fetch while holding the request lock."""
+        self._raise_if_blocked()
         if not path.startswith("/"):
             path = f"/{path}"
         if not path.startswith(SOFASCORE_API_PREFIX + "/"):
@@ -1187,13 +1283,36 @@ class SofascoreClient:
             await self._wait_for_slot()
 
             try:
-                status_code, body = await self._browser_fetch(path)
+                status_code, body, retry_after = await self._browser_fetch(path)
                 self._last_request_at = asyncio.get_running_loop().time()
 
-                if status_code in {403, 429}:
+                if status_code == 403:
+                    error = SofascoreHTTPError(status_code, path, body)
+                    self._blocked_error = error
+                    LOGGER.error(
+                        "SofaScore denied %s with HTTP 403; stopping further SofaScore requests in this run",
+                        path,
+                    )
+                    raise error
+
+                if status_code == 429:
                     if attempt >= self.request_max_retries:
-                        raise SofascoreHTTPError(status_code, path, body)
-                    await self._backoff(status_code, path, attempt)
+                        await self._backoff(
+                            status_code,
+                            path,
+                            attempt,
+                            retry_after=retry_after,
+                            retry=False,
+                        )
+                        error = SofascoreHTTPError(status_code, path, body)
+                        self._blocked_error = error
+                        raise error
+                    await self._backoff(
+                        status_code,
+                        path,
+                        attempt,
+                        retry_after=retry_after,
+                    )
                     continue
 
                 if status_code < 200 or status_code >= 300:
@@ -1208,7 +1327,7 @@ class SofascoreClient:
 
         raise RuntimeError(f"Request loop unexpectedly exhausted for {path}")
 
-    async def _browser_fetch(self, path: str) -> tuple[int, Any]:
+    async def _browser_fetch(self, path: str) -> tuple[int, Any, str | None]:
         result = await self.page.evaluate(
             """
             async (requestPath) => {
@@ -1228,15 +1347,26 @@ class SofascoreClient:
                 return {
                     status: response.status,
                     body,
+                    retryAfter: response.headers.get("retry-after"),
                 };
             }
             """,
             path,
         )
-        return int(result["status"]), result.get("body")
+        return int(result["status"]), result.get("body"), result.get("retryAfter")
+
+    def _raise_if_blocked(self) -> None:
+        """Stop the current run after SofaScore denies or rate-limits a request."""
+        if self._blocked_error is not None:
+            raise self._blocked_error
 
     async def _wait_for_slot(self) -> None:
+        cooldown_until = getattr(self, "_cooldown_until", 0.0)
         if self._last_request_at is None:
+            loop = asyncio.get_running_loop()
+            cooldown = max(0.0, cooldown_until - loop.time())
+            if cooldown:
+                await asyncio.sleep(cooldown)
             return
 
         loop = asyncio.get_running_loop()
@@ -1252,7 +1382,12 @@ class SofascoreClient:
                 self.request_burst_pause * 1.5,
             )
 
-        sleep_for = max(0.0, target_delay - elapsed)
+        loop = asyncio.get_running_loop()
+        sleep_for = max(
+            0.0,
+            target_delay - elapsed,
+            cooldown_until - loop.time(),
+        )
         if sleep_for > 0:
             LOGGER.debug(
                 "Sleeping %.2fs before SofaScore request (elapsed=%.2fs, target=%.2fs)",
@@ -1262,19 +1397,55 @@ class SofascoreClient:
             )
             await asyncio.sleep(sleep_for)
 
-    async def _backoff(self, status_code: int, path: str, attempt: int) -> None:
-        base = self.request_backoff_base * (2**attempt)
-        jitter = random.uniform(0.0, max(self.request_jitter, 0.5))
-        delay = base + jitter
+    async def _backoff(
+        self,
+        status_code: int,
+        path: str,
+        attempt: int,
+        *,
+        retry_after: str | None = None,
+        retry: bool = True,
+    ) -> None:
+        delay = self._retry_after_seconds(retry_after)
+        if delay is None:
+            base = self.request_backoff_base * (2**attempt)
+            jitter = random.uniform(0.0, max(self.request_jitter, 0.5))
+            delay = base + jitter
+        loop = asyncio.get_running_loop()
+        self._cooldown_until = max(
+            getattr(self, "_cooldown_until", 0.0), loop.time() + delay
+        )
+        sleep_for = max(0.0, self._cooldown_until - loop.time())
         LOGGER.warning(
-            "SofaScore returned %s for %s; retrying in %.2fs (attempt %d/%d)",
+            "SofaScore returned %s for %s; cooling down for %.2fs%s (attempt %d/%d)",
             status_code,
             path,
-            delay,
+            sleep_for,
+            "; retrying" if retry else "",
             attempt + 1,
-            self.request_max_retries,
+            self.request_max_retries + 1,
         )
-        await asyncio.sleep(delay)
+        if retry and sleep_for:
+            await asyncio.sleep(sleep_for)
+
+    @staticmethod
+    def _retry_after_seconds(value: str | None) -> float | None:
+        """Parse either form permitted by the HTTP Retry-After header."""
+        if not value:
+            return None
+        try:
+            seconds = float(value.strip())
+        except (TypeError, ValueError):
+            try:
+                retry_at = parsedate_to_datetime(value)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                seconds = (retry_at - datetime.now(timezone.utc)).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                return None
+        if not math.isfinite(seconds):
+            return None
+        return max(0.0, seconds)
 
     async def load_match_index(self, *, force: bool = False) -> list[dict[str, Any]]:
         """Index the currently visible SofaScore football match links once.
@@ -1325,14 +1496,57 @@ class SofascoreClient:
         target_date: str | date | None = None,
         force_reindex: bool = False,
     ) -> dict[str, Any] | None:
-        """Resolve fixture names through progressive SofaScore global search.
+        """Resolve through one cached date schedule, then search as fallback.
 
-        ``target_date`` is optional for backwards compatibility. When supplied,
-        it is the source of truth: only a SofaScore event whose actual event
-        date matches it is accepted. When omitted, the existing name-based
-        behaviour is preserved.
+        The date schedule is fetched once per client/date and matched locally.
+        Fixtures not found there fall back to the existing name search. A
+        denied or rate-limited schedule request is propagated without issuing
+        additional searches.
         """
         del force_reindex
+
+        requested_date = self._coerce_date(target_date)
+        self._raise_if_blocked()
+        if requested_date is not None:
+            try:
+                scheduled_event = await self.resolve_fixture_event(
+                    home_team,
+                    away_team,
+                    requested_date,
+                )
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.warning(
+                    "SofaScore schedule lookup failed; falling back to match search: %s",
+                    exc,
+                )
+            except Exception:
+                LOGGER.warning(
+                    "SofaScore schedule lookup failed; falling back to match search",
+                    exc_info=True,
+                )
+            else:
+                if isinstance(scheduled_event, dict) and scheduled_event.get("id") is not None:
+                    event_id = scheduled_event["id"]
+                    home = scheduled_event.get("homeTeam")
+                    away = scheduled_event.get("awayTeam")
+                    event_text = " - ".join(
+                        str(team.get("name") or fallback)
+                        for team, fallback in (
+                            (home if isinstance(home, dict) else {}, home_team),
+                            (away if isinstance(away, dict) else {}, away_team),
+                        )
+                    )
+                    return {
+                        "event_id": event_id,
+                        "href": None,
+                        "text": event_text,
+                        "data_id": str(event_id),
+                        "kind": "game",
+                        "match_date": requested_date,
+                        "event_data": scheduled_event,
+                    }
 
         result = await self.searcher.find_game(
             home_team,
@@ -1410,10 +1624,23 @@ class SofascoreClient:
             if isinstance(target_date, date)
             else str(target_date)
         )
+        key = (date_value, sport, inverse)
+        cached_error = self._scheduled_events_errors.get(key)
+        if cached_error is not None:
+            raise cached_error
+        cached = self._scheduled_events_cache.get(key)
+        if cached is not None:
+            return cached
         resource = "scheduled_events_inverse" if inverse else "scheduled_events"
-        payload = await self.fetch(resource, sport=sport, date=date_value)
+        try:
+            payload = await self.fetch(resource, sport=sport, date=date_value)
+        except Exception as exc:
+            # Do not repeat a failed date-schedule request once per fixture.
+            self._scheduled_events_errors[key] = exc
+            raise
         if not isinstance(payload, dict):
             raise ValueError(f"Unexpected scheduled-events response for {date_value}")
+        self._scheduled_events_cache[key] = payload
         return payload
 
     async def resolve_fixture_event(
@@ -1530,6 +1757,11 @@ class SofascoreClient:
         referee_id = referee["id"]
         try:
             details = await self.fetch("referee", referee_id=referee_id)
+        except SofascoreHTTPError as exc:
+            if exc.status_code in {403, 429}:
+                raise
+            LOGGER.debug("Could not fetch referee profile %s: %s", referee_id, exc)
+            details = referee
         except Exception:
             LOGGER.debug("Could not fetch referee profile %s", referee_id, exc_info=True)
             details = referee
@@ -1544,6 +1776,10 @@ class SofascoreClient:
                     "referee_statistics",
                     referee_id=referee_id,
                 )
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.debug("Could not fetch referee statistics for %s: %s", referee_id, exc)
             except Exception as exc:
                 # Keep the basic referee data useful even if the separate stats
                 # resource is temporarily unavailable.
@@ -1609,21 +1845,8 @@ class SofascoreClient:
         home_team: str | None = None,
         away_team: str | None = None,
     ) -> Any:
-        """Return event team streaks, falling back to the match-page H2H flow."""
-        try:
-            return await self.fetch("team_streaks", event_id=event_id)
-        except SofascoreHTTPError as exc:
-            if exc.status_code not in {403, 429}:
-                raise
-            LOGGER.warning(
-                "Direct team-streaks request failed with %s; trying the match-page flow",
-                exc.status_code,
-            )
-            return await self._fetch_team_streaks_from_match_page(
-                event_id,
-                home_team=home_team,
-                away_team=away_team,
-            )
+        """Return event streaks; denied requests stop the current collection."""
+        return await self.fetch("team_streaks", event_id=event_id)
 
     async def _fetch_team_streaks_from_match_page(
         self,

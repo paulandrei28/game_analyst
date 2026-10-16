@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,7 @@ async def run_pipeline(
 
     output_date = target_date.strftime("%Y%m%d")
     streaks_path = streaks_dir / f"team_streaks_{output_date}.json"
+    progress_path = streaks_dir / f"team_streaks_{output_date}.progress.json"
     context_path = context_dir / f"match_context_{output_date}.json"
     analysis_path = json_analysis_dir / f"analysis_{output_date}.json"
     report_path = report_dir / f"report_{output_date}.md"
@@ -76,6 +78,22 @@ async def run_pipeline(
             raise RuntimeError("No fixtures found; stopping the pipeline")
 
         LOGGER.info("Fetching team streaks from SofaScore")
+        partial_streaks, partial_contexts = _load_progress_cache(
+            progress_path,
+            fixture_games,
+        )
+
+        def checkpoint_progress(
+            current_streaks: dict[str, Any],
+            current_contexts: dict[str, Any],
+        ) -> None:
+            _save_progress_cache(
+                progress_path,
+                fixture_games,
+                current_streaks,
+                current_contexts,
+            )
+
         streaks, match_context = await fetch_team_match_data(
             fixture_games,
             target_date=target_date,
@@ -89,12 +107,16 @@ async def run_pipeline(
             worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
                 game, context, fixture_metadata, derby_matcher
             ),
+            initial_streaks=partial_streaks,
+            initial_contexts=partial_contexts,
+            progress_callback=checkpoint_progress,
         )
         if not streaks:
             raise RuntimeError("No team streaks found; stopping the pipeline")
         _save_json(streaks, streaks_path)
         LOGGER.info("Team streaks written to %s", streaks_path)
         _save_json(match_context, context_path)
+        progress_path.unlink(missing_ok=True)
     else:
         LOGGER.info("Using cached team streaks from %s", streaks_path)
         try:
@@ -124,6 +146,22 @@ async def run_pipeline(
                         api_timeout_seconds=settings.api_timeout_seconds,
                     )
                 if fixture_games:
+                    partial_streaks, partial_contexts = _load_progress_cache(
+                        progress_path,
+                        fixture_games,
+                    )
+
+                    def checkpoint_progress(
+                        current_streaks: dict[str, Any],
+                        current_contexts: dict[str, Any],
+                    ) -> None:
+                        _save_progress_cache(
+                            progress_path,
+                            fixture_games,
+                            current_streaks,
+                            current_contexts,
+                        )
+
                     _, match_context = await fetch_team_match_data(
                         fixture_games,
                         target_date=target_date,
@@ -139,8 +177,12 @@ async def run_pipeline(
                         worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
                             game, context, fixture_metadata, derby_matcher
                         ),
+                        initial_streaks=partial_streaks,
+                        initial_contexts=partial_contexts,
+                        progress_callback=checkpoint_progress,
                     )
                     _save_json(match_context, context_path)
+                    progress_path.unlink(missing_ok=True)
             except Exception:
                 LOGGER.warning("Match context unavailable; referee scoring will be skipped", exc_info=True)
                 match_context = {}
@@ -268,6 +310,65 @@ def _save_json(data: dict, path: Path) -> None:
         json.dumps(data, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def _load_progress_cache(
+    path: Path,
+    fixture_games: list[str],
+    *,
+    max_age_seconds: float = 6 * 60 * 60,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load recent per-fixture progress for an identical daily fixture list."""
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        saved_at = float(cached["saved_at"])
+        cached_fixtures = cached["fixtures"]
+        streaks = cached["streaks"]
+        contexts = cached["match_context"]
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return {}, {}
+
+    if (
+        time.time() - saved_at > max_age_seconds
+        or not isinstance(cached_fixtures, list)
+        or sorted(cached_fixtures) != sorted(fixture_games)
+        or not isinstance(streaks, dict)
+        or not isinstance(contexts, dict)
+    ):
+        LOGGER.info("Ignoring stale or mismatched SofaScore progress cache: %s", path)
+        return {}, {}
+
+    LOGGER.info(
+        "Resuming SofaScore progress from %s (%d streaks, %d contexts)",
+        path,
+        len(streaks),
+        len(contexts),
+    )
+    return streaks, contexts
+
+
+def _save_progress_cache(
+    path: Path,
+    fixture_games: list[str],
+    streaks: dict[str, Any],
+    contexts: dict[str, Any],
+) -> None:
+    """Atomically checkpoint completed fixture data for safe resumption."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path.write_text(
+        json.dumps(
+            {
+                "saved_at": time.time(),
+                "fixtures": fixture_games,
+                "streaks": streaks,
+                "match_context": contexts,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
 
 
 def parse_args() -> argparse.Namespace:

@@ -1,25 +1,33 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
 try:
-    from .sofascore_client import SofascoreClient
+    from .sofascore_client import SofascoreClient, SofascoreHTTPError
     from .sofascore_statistics import (
         enrich_qualifying_team_statistics,
         team_statistics_request_keys,
     )
 except ImportError:  # pragma: no cover
-    from sofascore_client import SofascoreClient
+    from sofascore_client import SofascoreClient, SofascoreHTTPError
     from sofascore_statistics import (
         enrich_qualifying_team_statistics,
         team_statistics_request_keys,
     )
 
 LOGGER = logging.getLogger(__name__)
+
+
+async def _raise_if_client_blocked(client: SofascoreClient) -> None:
+    """Check the client's stop state, including async test doubles."""
+    result = client._raise_if_blocked()
+    if inspect.isawaitable(result):
+        await result
 
 
 def _as_games(games: Any) -> list[Any]:
@@ -62,9 +70,8 @@ async def fetch_team_streaks(
 ) -> dict[str, Any]:
     """Return ``{game: team_streaks}`` using the cached fixture names.
 
-    SofaScore event IDs are resolved from the football page's match links.
-    The page is indexed once per client session, then each fixture is matched
-    by home/away names and, when supplied, its actual event date.
+    SofaScore event IDs are resolved from one date schedule per client session,
+    with progressive page search reserved for fixtures the schedule misses.
     """
     streaks, _ = await fetch_team_match_data(
         games,
@@ -99,13 +106,16 @@ async def fetch_team_match_data(
     request_burst_pause: float = 12.0,
     request_backoff_base: float = 3.0,
     request_max_retries: int = 4,
+    initial_streaks: dict[str, Any] | None = None,
+    initial_contexts: dict[str, Any] | None = None,
+    progress_callback: Callable[[dict[str, Any], dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Fetch streaks and optional event context in one SofaScore session."""
+    """Fetch match data, resuming completed fixtures from a progress checkpoint."""
     del sport, inverse
 
     fixture_list = _as_games(games)
-    results: dict[str, Any] = {}
-    contexts: dict[str, Any] = {}
+    results: dict[str, Any] = dict(initial_streaks or {})
+    contexts: dict[str, Any] = dict(initial_contexts or {})
     if not fixture_list:
         LOGGER.warning("No games supplied to fetch_team_streaks")
         return results, contexts
@@ -130,13 +140,28 @@ async def fetch_team_match_data(
 
             home_team, away_team = teams
             display_key = f"{home_team} - {away_team}"
+            cached_context = contexts.get(display_key)
+            has_context = (
+                isinstance(cached_context, dict)
+                and cached_context.get("event_id") is not None
+            )
+            needs_context = include_context and not has_context
+            needs_streaks = include_streaks and display_key not in results
+            if not needs_context and not needs_streaks:
+                continue
 
             try:
-                event = await client.resolve_event_by_match_name(
-                    home_team,
-                    away_team,
-                    target_date=target_date,
-                )
+                if has_context:
+                    event = {
+                        "event_id": cached_context["event_id"],
+                        "event_data": cached_context.get("event"),
+                    }
+                else:
+                    event = await client.resolve_event_by_match_name(
+                        home_team,
+                        away_team,
+                        target_date=target_date,
+                    )
                 if event is None:
                     LOGGER.warning(
                         "Could not resolve SofaScore match by name: %s",
@@ -151,7 +176,7 @@ async def fetch_team_match_data(
                     event_id,
                 )
 
-                if include_context:
+                if needs_context:
                     context: dict[str, Any] = {
                         "event_id": event_id,
                         "event": event.get("event_data"),
@@ -181,6 +206,10 @@ async def fetch_team_match_data(
                         context["odds"] = await client.fetch("event_odds_1x2", event_id=event_id)
                         if context["odds"] is None:
                             LOGGER.debug("1X2 odds unavailable for %s", display_key)
+                    except SofascoreHTTPError as exc:
+                        if exc.status_code in {403, 429}:
+                            raise
+                        LOGGER.debug("Could not retrieve 1X2 odds for %s", display_key, exc_info=True)
                     except Exception:
                         LOGGER.debug("Could not retrieve 1X2 odds for %s", display_key, exc_info=True)
 
@@ -193,13 +222,17 @@ async def fetch_team_match_data(
                                 event_id,
                                 event_payload=event.get("event_data"),
                             )
+                        except SofascoreHTTPError as exc:
+                            if exc.status_code in {403, 429}:
+                                raise
+                            LOGGER.debug("Could not retrieve referee data for %s", display_key, exc_info=True)
                         except Exception:
                             LOGGER.debug("Could not retrieve referee data for %s", display_key, exc_info=True)
                     contexts[display_key] = context
 
                 # Ordinary form/streak data still serves the existing analysis
                 # pipeline and is independent of worth_watching eligibility.
-                if include_streaks:
+                if needs_streaks:
                     streaks = await client.fetch_team_streaks(
                         event_id,
                         home_team=home_team,
@@ -207,6 +240,17 @@ async def fetch_team_match_data(
                     )
                     results[display_key] = streaks
                     LOGGER.info("Retrieved streaks for %s", display_key)
+                if progress_callback is not None:
+                    progress_callback(results, contexts)
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    pending = [task for task in statistics_tasks.values() if not task.done()]
+                    for task in pending:
+                        task.cancel()
+                    if statistics_tasks:
+                        await asyncio.gather(*statistics_tasks.values(), return_exceptions=True)
+                    raise
+                LOGGER.exception("Could not retrieve match data for %s", display_key)
             except Exception:
                 LOGGER.exception("Could not retrieve match data for %s", display_key)
 
@@ -216,9 +260,17 @@ async def fetch_team_match_data(
             try:
                 if statistics_tasks:
                     await asyncio.gather(*statistics_tasks.values(), return_exceptions=True)
+                await _raise_if_client_blocked(client)
                 await enrich_qualifying_team_statistics(client, contexts, set(contexts))
+                await _raise_if_client_blocked(client)
             except Exception:
-                LOGGER.warning("Could not enrich team-season disciplinary statistics", exc_info=True)
+                LOGGER.warning(
+                    "Could not enrich team-season disciplinary statistics",
+                    exc_info=True,
+                )
+                await _raise_if_client_blocked(client)
+            if progress_callback is not None:
+                progress_callback(results, contexts)
 
     LOGGER.info(
         "Retrieved team streaks for %d of %d games",

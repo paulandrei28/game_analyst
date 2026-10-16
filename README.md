@@ -8,12 +8,16 @@ and Markdown reports.
 
 1. Resolve the requested relative date: `yesterday`, `today`, or `tomorrow`.
 2. Fetch configured API-Football fixtures and store fixture metadata.
-3. Retrieve team streak data from Sofascore.
-4. Generate and rank prediction candidates from the available evidence.
-5. Write an analysis payload and a human-readable report.
+3. Resolve fixtures from one Sofascore date schedule request, then use the
+   progressive match search only for fixtures the schedule does not match.
+4. Retrieve team streak data from Sofascore.
+5. Generate and rank prediction candidates from the available evidence.
+6. Write an analysis payload and a human-readable report.
 
 The pipeline reuses date-specific fixture metadata and team-streak data from
-`output/` when available.
+`output/` when available. Interrupted SofaScore runs checkpoint completed
+fixtures for up to six hours so a rerun can continue without fetching them
+again.
 
 ## Project layout
 
@@ -81,6 +85,10 @@ Available options:
 
 `config.toml` controls the pipeline date, output location, prediction filters,
 fixture competitions, and Sofascore request pacing.
+
+SofaScore HTTP 403 responses stop collection immediately. HTTP 429 responses
+use the server's `Retry-After` value when provided; after retries are exhausted,
+the current collection stops and leaves its progress checkpoint for a later run.
 
 ```toml
 [pipeline]
