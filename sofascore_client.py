@@ -172,6 +172,12 @@ class SofascoreSearcher:
         r"\b(accept all|accept cookies|accept|i agree|i accept|allow all|agree to all|consent|i consent)\b",
         re.IGNORECASE,
     )
+    _SURVEY_PROMPT_PATTERN = re.compile(
+        r"(ajută-ne să fim mai buni|please take a short survey|make sofascore better)",
+        re.IGNORECASE,
+    )
+    _OVERLAY_CLOSE_PATTERN = re.compile(r"(close|dismiss|închide|inchide)", re.IGNORECASE)
+    _SURVEY_LATER_PATTERN = re.compile(r"(întreabă mai târziu|intreaba mai tarziu|ask me later)", re.IGNORECASE)
     _ROBOT_CHECK_FRAME_SELECTOR = 'iframe[title*="recaptcha" i], iframe[src*="recaptcha" i]'
 
     def __init__(
@@ -263,8 +269,8 @@ class SofascoreSearcher:
             await self._open_search()
             search_input = await self._get_search_input()
             if search_input is None:
-                # The search control can be hidden behind a cookie banner or a
-                # bot-check prompt; dismiss those and retry once before giving up.
+                # Cookie, robot-check, and SofaScore survey overlays can cover
+                # the page. Dismiss them and retry before giving up.
                 if await self._dismiss_blocking_overlays():
                     await self._open_search()
                     search_input = await self._get_search_input()
@@ -951,10 +957,84 @@ class SofascoreSearcher:
         return False
 
     async def _dismiss_blocking_overlays(self) -> bool:
-        """Best-effort dismissal of cookie banners and bot-check prompts."""
+        """Best-effort dismissal of cookie, survey, and bot-check overlays."""
         cookie_dismissed = await self._dismiss_cookie_consent()
+        survey_dismissed = await self._dismiss_survey_prompt()
         robot_dismissed = await self._dismiss_robot_check()
-        return cookie_dismissed or robot_dismissed
+        return cookie_dismissed or survey_dismissed or robot_dismissed
+
+    async def _dismiss_survey_prompt(self) -> bool:
+        """Close SofaScore's blocking feedback survey when it is visible."""
+        for frame in self.client.page.frames:
+            try:
+                prompt = frame.get_by_text(self._SURVEY_PROMPT_PATTERN).first
+                if not await prompt.is_visible():
+                    continue
+            except Exception:
+                continue
+
+            scope = frame
+            dialogs = frame.locator('[role="dialog"], [aria-modal="true"]')
+            try:
+                for index in range(await dialogs.count()):
+                    dialog = dialogs.nth(index)
+                    if (
+                        await dialog.is_visible()
+                        and self._SURVEY_PROMPT_PATTERN.search(await dialog.inner_text())
+                    ):
+                        scope = dialog
+                        break
+            except Exception:
+                pass
+            if scope is frame:
+                try:
+                    survey_container = prompt.locator(
+                        "xpath=ancestor::div[.//button][1]"
+                    )
+                    if (
+                        await survey_container.is_visible()
+                        and self._SURVEY_PROMPT_PATTERN.search(
+                            await survey_container.inner_text()
+                        )
+                    ):
+                        scope = survey_container
+                except Exception:
+                    pass
+
+            # Prefer the survey's X/close control. Try common accessibility
+            # labels first, then its localized "Ask me later" action.
+            candidates = [
+                scope.get_by_role("button", name=self._OVERLAY_CLOSE_PATTERN),
+                scope.locator(
+                    '[aria-label*="close" i], [title*="close" i], '
+                    '[aria-label*="închide" i], [title*="închide" i], '
+                    '[aria-label*="inchide" i], [title*="inchide" i]'
+                ),
+            ]
+            if scope is not frame:
+                # The survey's X may have no accessible label; in its scoped
+                # card it is the first button in the common SofaScore layout.
+                candidates.append(scope.locator("button"))
+            candidates.append(scope.get_by_role("button", name=self._SURVEY_LATER_PATTERN))
+            for locator in candidates:
+                try:
+                    count = await locator.count()
+                except Exception:
+                    continue
+                for index in range(count):
+                    candidate = locator.nth(index)
+                    try:
+                        if not await candidate.is_visible():
+                            continue
+                        await candidate.click(timeout=5_000)
+                        LOGGER.info("Dismissed SofaScore feedback survey overlay")
+                        await self._sleep_random(
+                            "After dismissing SofaScore feedback survey", 0.3, 0.8
+                        )
+                        return True
+                    except Exception:
+                        continue
+        return False
 
     async def _dismiss_cookie_consent(self) -> bool:
         # The consent dialog is sometimes rendered in the main document and
@@ -1990,15 +2070,28 @@ class SofascoreClient:
             except (OSError, json.JSONDecodeError):
                 LOGGER.debug("Ignoring invalid SofaScore team statistics cache: %s", cache_path)
 
-        result = await self.fetch(
-            "team_statistics",
-            team_id=team_id,
-            tournament_id=tournament_id,
-            season_id=season_id,
-            statistics_type=statistics_type,
-        )
+        try:
+            result = await self.fetch(
+                "team_statistics",
+                team_id=team_id,
+                tournament_id=tournament_id,
+                season_id=season_id,
+                statistics_type=statistics_type,
+            )
+        except SofascoreHTTPError as exc:
+            if exc.status_code != 404:
+                raise
+            # Team-season statistics are optional and SofaScore returns 404
+            # when it has no record for a particular team/season. Remember
+            # that result so concurrent prefetch and enrichment do not make
+            # the same failing request twice.
+            LOGGER.debug(
+                "SofaScore team statistics unavailable (404) for team=%s, tournament=%s, season=%s, type=%s",
+                *key,
+            )
+            result = None
         self._team_statistics_cache[key] = result
-        if result is not None and cache_path is not None:
+        if cache_path is not None:
             try:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")

@@ -5,7 +5,10 @@ import math
 import logging
 from typing import Any
 
-from .sofascore_client import SofascoreClient
+try:
+    from .sofascore_client import SofascoreClient
+except ImportError:  # pragma: no cover - direct standalone script execution
+    from sofascore_client import SofascoreClient
 
 BASELINE_MIN_TEAMS = 4
 LOGGER = logging.getLogger(__name__)
@@ -76,7 +79,7 @@ def _penalty_total(won: float | None, conceded: float | None) -> float | None:
     return won if conceded is None else conceded
 
 
-def parse_team_statistics(payload: Any) -> dict[str, float | int | None]:
+def parse_team_statistics(payload: Any) -> dict[str, Any]:
     """Normalize SofaScore's ``{statistics: {...}}`` season response.
 
     Missing keys stay ``None``. SofaScore does not expose every metric for all
@@ -105,7 +108,14 @@ def parse_team_statistics(payload: Any) -> dict[str, float | int | None]:
     penalty_goals_conceded = _first_number(statistics, ("penaltyGoalsConceded",))
 
     penalties = _penalty_total(penalties_won, penalties_conceded)
-    return {
+    # Keep numeric SofaScore fields so newly supported season stats remain
+    # available to analysis without another API request or parser rewrite.
+    parsed: dict[str, Any] = {
+        key: number
+        for key, value in statistics.items()
+        if (number := _number(value)) is not None
+    }
+    parsed.update({
         "matches": matches,
         "fouls": fouls,
         "yellow_cards": yellow,
@@ -122,7 +132,28 @@ def parse_team_statistics(payload: Any) -> dict[str, float | int | None]:
         "penalties_per_match": _per_match_rate(penalties, matches),
         "penalties_won_per_match": _per_match_rate(penalties_won, matches),
         "penalties_conceded_per_match": _per_match_rate(penalties_conceded, matches),
+    })
+
+    # SofaScore uses both totals and already-normalized per-game fields,
+    # depending on the competition. Prefer explicit per-game values.
+    rate_fields = {
+        "goals_scored_per_match": (("goalsPerGame", "goalsScoredPerGame"), ("goalsScored", "goals")),
+        "goals_conceded_per_match": (("goalsConcededPerGame",), ("goalsConceded",)),
+        "corners_per_match": (("cornersPerGame", "corners_per_match"), ("corners",)),
+        "total_shots_per_match": (("totalShotsPerGame", "shotsPerGame"), ("totalShots", "shots")),
+        "shots_on_target_per_match": (("shotsOnTargetPerGame",), ("shotsOnTarget",)),
+        "fouls_per_match": (("foulsPerGame",), ("fouls", "foulsCommitted")),
+        "yellow_cards_per_match": (("yellowCardsPerGame",), ("yellowCards", "yellow_cards")),
+        "red_cards_per_match": (("redCardsPerGame",), ("redCards", "red_cards")),
+        "second_yellow_cards_per_match": (("yellowRedCardsPerGame",), ("yellowRedCards", "secondYellowCards", "second_yellow_cards")),
     }
+    for output, (rate_keys, total_keys) in rate_fields.items():
+        explicit_rate = _first_number(statistics, rate_keys)
+        if explicit_rate is not None:
+            parsed[output] = explicit_rate
+        elif output not in {"fouls_per_match", "yellow_cards_per_match", "red_cards_per_match", "second_yellow_cards_per_match"}:
+            parsed[output] = _per_match_rate(_first_number(statistics, total_keys), matches)
+    return parsed
 
 
 async def enrich_qualifying_team_statistics(
@@ -135,9 +166,9 @@ async def enrich_qualifying_team_statistics(
     The client owns keyed memory/disk caching and transport pacing. Competition
     baselines use unique teams collected across the supplied fixtures.
     """
-    team_payloads: dict[tuple[str, str, str, str], dict[str, float | int | None] | None] = {}
+    team_payloads: dict[tuple[str, str, str, str], dict[str, Any] | None] = {}
     game_keys: dict[str, tuple[str, str] | None] = {}
-    teams_by_competition: dict[tuple[str, str], dict[str, dict[str, float | int | None]]] = {}
+    teams_by_competition: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
 
     for game in qualifying_games:
         context = contexts.get(game)
@@ -151,7 +182,7 @@ async def enrich_qualifying_team_statistics(
             continue
 
         game_keys[game] = competition_key
-        team_rows: dict[str, dict[str, float | int | None] | None] = {}
+        team_rows: dict[str, dict[str, Any] | None] = {}
         for side in ("home", "away"):
             request_key = request_keys.get(side)
             if request_key is None:

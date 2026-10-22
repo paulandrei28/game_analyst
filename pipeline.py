@@ -304,7 +304,17 @@ def _qualifies_for_worth_watching(game: str, context: Any, metadata: dict[str, A
 
 
 def _missing_team_statistics(context: Any) -> bool:
-    return not isinstance(context, dict) or not isinstance(context.get("team_statistics"), dict)
+    if not isinstance(context, dict) or not isinstance(context.get("team_statistics"), dict):
+        return True
+    rows = context["team_statistics"]
+    # Older match-context caches only contain discipline fields. Refresh them
+    # once so the analyzer also receives normalized goals and corner rates.
+    required = ("goals_scored_per_match", "goals_conceded_per_match", "corners_per_match")
+    return any(
+        not isinstance(rows.get(side), dict)
+        or any(key not in rows[side] for key in required)
+        for side in ("home", "away")
+    )
 
 
 def _save_json(data: dict, path: Path) -> None:

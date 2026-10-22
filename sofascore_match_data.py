@@ -15,9 +15,11 @@ from typing import Any
 try:
     from .config import load_config
     from .sofascore_client import SofascoreClient, SofascoreHTTPError
+    from .sofascore_statistics import parse_team_statistics
 except ImportError:  # pragma: no cover
     from config import load_config
     from sofascore_client import SofascoreClient, SofascoreHTTPError
+    from sofascore_statistics import parse_team_statistics
 
 LOGGER = logging.getLogger(__name__)
 OUTCOMES = {"1": "Home win (1)", "x": "Draw (X)", "2": "Away win (2)"}
@@ -206,6 +208,123 @@ def _show(value: Any) -> str:
     return "Not available" if value is None or value == "" else str(value)
 
 
+def _format_number(value: Any, decimals: int = 1) -> str:
+    number = _number_or_none(value)
+    if number is None:
+        return _show(value)
+    return f"{number:.{decimals}f}".rstrip("0").rstrip(".")
+
+
+TEAM_STAT_SECTIONS = {
+    "Season summary": (
+        ("Sofascore rating", "avgRating", "number"),
+        ("Games", "matches", "number"),
+        ("Goals scored", "goalsScored", "number"),
+        ("Goals conceded", "goalsConceded", "number"),
+        ("Assists", "assists", "number"),
+    ),
+    "Running performance": (
+        ("Distance covered per game", "kilometersCoveredPerGame", "number"),
+        ("Sprints per game", "numberOfSprintsPerGame", "number"),
+    ),
+    "Attacking": (
+        ("Goals per game", "goals_scored_per_match", "number"),
+        ("Penalty goals", "penaltyGoals", "number"),
+        ("Free kick goals", "freeKickGoals", "number"),
+        ("Goals from inside the box / shots", "goalsFromInsideTheBox", "fraction:shotsFromInsideTheBox"),
+        ("Goals from outside the box / shots", "goalsFromOutsideTheBox", "fraction:shotsFromOutsideTheBox"),
+        ("Left-footed goals", "leftFootGoals", "number"),
+        ("Right-footed goals", "rightFootGoals", "number"),
+        ("Headed goals", "headedGoals", "number"),
+        ("Big chances per game", "bigChances", "per_game"),
+        ("Big chances missed per game", "bigChancesMissed", "per_game"),
+        ("Total shots per game", "total_shots_per_match", "number"),
+        ("Shots on target per game", "shots_on_target_per_match", "number"),
+        ("Shots off target per game", "shotsOffTarget", "per_game"),
+        ("Blocked shots per game", "blockedScoringAttempt", "per_game"),
+        ("Successful dribbles per game", "successfulDribbles", "per_game"),
+        ("Corners per game", "corners_per_match", "number"),
+        ("Free kicks per game", "freeKicks", "per_game"),
+        ("Hit woodwork", "hitWoodwork", "number"),
+        ("Counter attacks", "fastBreaks", "number"),
+    ),
+    "Passing": (
+        ("Ball possession", "averageBallPossession", "percent"),
+        ("Accurate passes", "accuratePasses", "percent:accuratePassesPercentage"),
+        ("Accurate own-half passes", "accurateOwnHalfPasses", "percent:accurateOwnHalfPassesPercentage"),
+        ("Accurate opposition-half passes", "accurateOppositionHalfPasses", "percent:accurateOppositionHalfPassesPercentage"),
+        ("Accurate long balls", "accurateLongBalls", "percent:accurateLongBallsPercentage"),
+        ("Accurate crosses", "accurateCrosses", "percent:accurateCrossesPercentage"),
+    ),
+    "Defending": (
+        ("Clean sheets", "cleanSheets", "number"),
+        ("Goals conceded per game", "goals_conceded_per_match", "number"),
+        ("Tackles per game", "tackles", "per_game"),
+        ("Interceptions per game", "interceptions", "per_game"),
+        ("Clearances per game", "clearances", "per_game"),
+        ("Saves per game", "saves", "per_game"),
+        ("Balls recovered per game", "ballRecovery", "per_game"),
+        ("Errors leading to a shot", "errorsLeadingToShot", "number"),
+        ("Errors leading to a goal", "errorsLeadingToGoal", "number"),
+        ("Penalties committed", "penalties_conceded", "number"),
+        ("Clearances off the line", "clearancesOffLine", "number"),
+        ("Last-man tackles", "lastManTackles", "number"),
+    ),
+    "Other": (
+        ("Duels won per game", "duelsWon", "per_game"),
+        ("Ground duels won per game", "groundDuelsWon", "per_game"),
+        ("Aerial duels won per game", "aerialDuelsWon", "per_game"),
+        ("Possession lost per game", "possessionLost", "per_game"),
+        ("Throw-ins per game", "throwIns", "per_game"),
+        ("Goal kicks per game", "goalKicks", "per_game"),
+        ("Offsides per game", "offsides", "per_game"),
+        ("Fouls per game", "fouls_per_match", "number"),
+        ("Yellow cards per game", "yellow_cards_per_match", "number"),
+        ("Red cards per game", "red_cards_per_match", "number"),
+    ),
+}
+
+
+def _team_stat_value(stats: dict[str, Any], key: str, mode: str) -> str | None:
+    value = stats.get(key)
+    if value is None:
+        return None
+    if mode == "per_game":
+        matches = _number_or_none(stats.get("matches"))
+        number = _number_or_none(value)
+        if matches is None or matches <= 0 or number is None:
+            return None
+        return _format_number(number / matches)
+    if mode.startswith("fraction:"):
+        denominator = stats.get(mode.partition(":")[2])
+        return f"{_format_number(value, 0)} / {_format_number(denominator, 0)}" if denominator is not None else None
+    if mode.startswith("percent:"):
+        percentage = stats.get(mode.partition(":")[2])
+        suffix = f" ({_format_number(percentage)}%)" if percentage is not None else ""
+        return f"{_format_number(value, 0)}{suffix}"
+    if mode == "percent":
+        return f"{_format_number(value)}%"
+    return _format_number(value)
+
+
+def format_team_season_statistics(name: str, stats: Any) -> list[str]:
+    """Format a team season-stat row as readable labeled sections."""
+    lines = [str(name)]
+    if not isinstance(stats, dict):
+        return [*lines, "  Statistics unavailable"]
+    for section, fields in TEAM_STAT_SECTIONS.items():
+        values = [
+            (label, formatted)
+            for label, key, mode in fields
+            if (formatted := _team_stat_value(stats, key, mode)) is not None
+        ]
+        if not values:
+            continue
+        lines.append(f"  {section}")
+        lines.extend(f"    {label}: {value}" for label, value in values)
+    return lines
+
+
 def _request_error(exc: Exception) -> str:
     if isinstance(exc, SofascoreHTTPError):
         body = str(exc.body)[:500] if exc.body is not None else "Not available"
@@ -263,12 +382,37 @@ async def run(home: str, away: str, target_date: date) -> int:
                     LOGGER.warning("Referee statistics request failed: %s", exc)
             referee = parse_referee(event, referee_details, stats)
 
+            tournament = _mapping(_mapping(event_data.get("tournament")).get("uniqueTournament"))
+            tournament_id = tournament.get("id", _mapping(event_data.get("tournament")).get("id"))
+            season_id = _mapping(event_data.get("season")).get("id")
+            team_season_stats: dict[str, dict[str, Any] | None] = {}
+            for side in ("home", "away"):
+                team = _mapping(event_data.get(f"{side}Team"))
+                if team.get("id") is None or tournament_id is None or season_id is None:
+                    team_season_stats[side] = None
+                    continue
+                try:
+                    raw_stats = await client.fetch_team_statistics(
+                        team["id"], tournament_id, season_id, statistics_type="overall"
+                    )
+                    team_season_stats[side] = parse_team_statistics(raw_stats) if raw_stats else None
+                except Exception as exc:
+                    LOGGER.warning("Team season statistics request failed for %s: %s", side, exc)
+                    team_season_stats[side] = None
+
             home_name = _mapping(event_data.get("homeTeam")).get("name")
             away_name = _mapping(event_data.get("awayTeam")).get("name")
             actual_date = match.get("match_date") or target_date
             print("MATCH")
             print(f"Requested: {home} - {away}\nSofaScore: {_show(home_name)} - {_show(away_name)}")
             print(f"Date: {actual_date}\nEvent ID: {event_id}")
+            print("\nTEAM SEASON STATISTICS")
+            print(f"Competition ID: {_show(tournament_id)} | Season ID: {_show(season_id)}")
+            for side, name in (("home", home_name), ("away", away_name)):
+                for line in format_team_season_statistics(
+                    name or side, team_season_stats.get(side)
+                ):
+                    print(line)
             print("\n1X2 ODDS")
             labels = {entry["label"]: entry for entry in odds}
             for key in ("Home win (1)", "Draw (X)", "Away win (2)"):

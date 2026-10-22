@@ -1479,6 +1479,106 @@ def apply_referee_card_adjustment(
     )
 
 
+def _poisson_over_probability(expected: float, threshold: float) -> float:
+    """Probability that a Poisson count is strictly above a market line."""
+    first_over = math.floor(threshold) + 1
+    probability_at_or_below = math.exp(-expected)
+    term = probability_at_or_below
+    for count in range(1, first_over):
+        term *= expected / count
+        probability_at_or_below += term
+    return max(0.0, min(1.0, 1.0 - probability_at_or_below))
+
+
+def season_market_profile(context: Any, category: str) -> tuple[float, float] | None:
+    """Return estimated match total and sample strength for an O/U market."""
+    if not isinstance(context, dict):
+        return None
+    team_stats = context.get("team_statistics")
+    if not isinstance(team_stats, dict):
+        return None
+    home = team_stats.get("home")
+    away = team_stats.get("away")
+    if not isinstance(home, dict) or not isinstance(away, dict):
+        return None
+
+    def rate(row: dict[str, Any], key: str) -> float | None:
+        return _finite_number(row.get(key))
+
+    matches = [value for row in (home, away) if (value := _finite_number(row.get("matches"))) is not None and value > 0]
+    if not matches:
+        return None
+    sample_strength = min(1.0, math.sqrt(sum(matches) / len(matches) / 10.0))
+
+    if category == "cards_ou":
+        def team_cards(row: dict[str, Any]) -> float | None:
+            yellow = rate(row, "yellow_cards_per_match")
+            red = rate(row, "red_cards_per_match")
+            if yellow is None and red is None:
+                return None
+            return (yellow or 0.0) + (red or 0.0)
+        components = [team_cards(home), team_cards(away)]
+        if any(value is None for value in components):
+            return None
+        return sum(value for value in components if value is not None), sample_strength
+
+    if category == "corners_ou":
+        components = [rate(home, "corners_per_match"), rate(away, "corners_per_match")]
+        if any(value is None for value in components):
+            return None
+        return sum(value for value in components if value is not None), sample_strength
+
+    if category == "goals_ou":
+        home_scored, away_conceded = rate(home, "goals_scored_per_match"), rate(away, "goals_conceded_per_match")
+        away_scored, home_conceded = rate(away, "goals_scored_per_match"), rate(home, "goals_conceded_per_match")
+        estimates = [
+            (attack + defense) / 2
+            for attack, defense in ((home_scored, away_conceded), (away_scored, home_conceded))
+            if attack is not None and defense is not None
+        ]
+        if not estimates:
+            # When conceded rates are missing, use both teams' scoring rates.
+            estimates = [value for value in (home_scored, away_scored) if value is not None]
+        if not estimates:
+            return None
+        return sum(estimates), sample_strength
+    return None
+
+
+def apply_team_season_adjustment(candidate: Candidate, context: Any) -> str:
+    """Use both teams' season scoring rates to adjust supported totals markets."""
+    threshold = candidate_threshold(candidate)
+    if threshold is None:
+        return ""
+    profile = season_market_profile(context, candidate.category)
+    if profile is None:
+        return "Team season rates unavailable; no adjustment applied."
+    expected, sample_strength = profile
+    over_probability = _poisson_over_probability(expected, threshold)
+    is_over = candidate.market.endswith("_over")
+    aligned = (over_probability >= 0.5) == is_over
+    # A bounded score shift derived from the modeled market probability.
+    # This complements recent streak evidence while limiting season stats to
+    # a secondary influence on the final ranking.
+    magnitude = min(10.0, abs(over_probability - 0.5) * 20.0) * sample_strength
+    if magnitude < 0.1:
+        return f"Team season average is near {threshold:g} {candidate.category.removesuffix('_ou')}; no adjustment applied."
+    if aligned:
+        candidate.score += magnitude
+        side = "Over" if is_over else "Under"
+        candidate.bonuses.append(
+            f"Team season rates estimate {expected:.2f} total; supports {side} {threshold:g} (+{magnitude:.1f})."
+        )
+        return f"Team season rates estimate {expected:.2f} total; supports {side} {threshold:g}."
+    applied = min(magnitude, candidate.score)
+    candidate.score = max(0.0, candidate.score - applied)
+    side = "Over" if is_over else "Under"
+    candidate.penalties.append(
+        f"Team season rates estimate {expected:.2f} total; conflicts with {side} {threshold:g} (-{applied:.1f})."
+    )
+    return f"Team season rates estimate {expected:.2f} total; conflicts with {side} {threshold:g}."
+
+
 def display_market(candidate: Candidate) -> str:
     """Convert a canonical candidate into a readable market label."""
 
@@ -1562,6 +1662,9 @@ class Analyzer:
             )
             for candidate in candidates:
                 score_candidate(candidate, evidences)
+                season_explanation = apply_team_season_adjustment(
+                    candidate, (match_context or {}).get(match_name)
+                )
                 explanation = apply_referee_card_adjustment(
                     candidate,
                     (match_context or {}).get(match_name),
@@ -1596,8 +1699,9 @@ class Analyzer:
                     "bonuses": candidate.bonuses,
                     "penalties": candidate.penalties,
                 }
-                if explanation:
-                    prediction["explanations"] = [explanation]
+                explanations = [item for item in (season_explanation, explanation) if item]
+                if explanations:
+                    prediction["explanations"] = explanations
                 results.append(prediction)
 
         if prediction_threshold is not None:
