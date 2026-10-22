@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 import logging
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,7 @@ async def run_pipeline(
     output_dir: str | Path | None = None,
     prediction_threshold: float | None = None,
     config: AppConfig | None = None,
+    include_ai: bool = True,
 ) -> dict[str, Path]:
     """Scrape, enrich, analyze, and save the daily match artifacts."""
     settings = config or load_config()
@@ -251,6 +254,24 @@ async def run_pipeline(
         title=f"Match Analysis Report - {output_date}",
         threshold_notice=threshold_notice,
     )
+    if include_ai:
+        ai_runner = Path(__file__).resolve().parent / "run_football_top_10.py"
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ai_runner),
+                    output_date,
+                    "--analysis-file",
+                    str(analysis_path.resolve()),
+                ],
+                cwd=Path(__file__).resolve().parent,
+                check=False,
+            )
+            if result.returncode:
+                LOGGER.warning("AI pick generation failed (exit code %s)", result.returncode)
+        except OSError:
+            LOGGER.warning("Could not start AI pick generator", exc_info=True)
     return {
         "streaks": streaks_path,
         "analysis": analysis_path,
@@ -396,6 +417,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Root directory for generated history files (default: project directory).",
     )
+    parser.add_argument(
+        "--no_ai",
+        "--no-ai",
+        dest="no_ai",
+        action="store_true",
+        help="Skip Codex AI Top 10 generation.",
+    )
     return parser.parse_args()
 
 
@@ -416,6 +444,7 @@ def main() -> None:
                     else settings.output_dir
                 ),
                 config=settings,
+                include_ai=not args.no_ai,
             )
         )
     except Exception:
