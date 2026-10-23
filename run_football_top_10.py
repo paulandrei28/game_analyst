@@ -55,10 +55,12 @@ def main() -> int:
         if os.name == "nt" and cli.lower().endswith((".cmd", ".bat")):
             result = subprocess.run(
                 subprocess.list2cmdline(command), cwd=ROOT, input=prompt,
-                text=True, shell=True, check=False,
+                text=True, encoding="utf-8", shell=True, check=False,
             )
         else:
-            result = subprocess.run(command, cwd=ROOT, input=prompt, text=True, check=False)
+            result = subprocess.run(
+                command, cwd=ROOT, input=prompt, text=True, encoding="utf-8", check=False
+            )
         if result.returncode:
             return result.returncode
         if not response_path.is_file():
