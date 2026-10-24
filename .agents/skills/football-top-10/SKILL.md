@@ -5,10 +5,20 @@ description: Select and present a concise, balanced Top 10 from the football ana
 
 # Football Top 10
 
-From the available analyser candidates, select the 10 best predictions (or all candidates if fewer than 10). Use the analyser's `score`, `prediction` strength, `confidence`, and `evidence` as useful signals, alongside informed football judgment. Never rank by score alone.
+Select the 10 strongest defensible predictions (or all candidates if fewer than 10), using score, prediction strength, confidence, evidence, and football judgment. Never rank by score alone. Exclude any candidate with a conflict noted for it.
 
-Weigh the available form and streak evidence, head-to-head data, season statistics, match context, and uncertainty. Do not invent statistics or present a speculative pick as certain. When there are more than 10 candidates, choose a diverse, slightly bold mix across matches and markets: balance strong evidence with plausible higher-upside alternatives. Avoid excessive conservatism, random guesses, and overloading the list with one game or market.
+Build a genuinely varied list across matches and market types. Compare all available options, such as goals, both teams to score, team totals, match result or double chance, corners, and cards. Avoid relying on one market type (especially cards) just because its candidates rank highly; use at most three picks from the same market type unless the candidate pool clearly leaves no sound alternatives. Include both Over and Under picks when supported. Look beyond the very top-ranked candidates for credible alternatives, but never force a weak or conflicted pick.
 
-Give each selected prediction one global rank from 1 to 10. Group every selected prediction for the same match under one heading (`Home - Away`), even when the picks use different markets. Put the market and selection clearly on each ranked line.
+Judge each pick in its match context: use the supplied form, home/away performance, scoring and conceding patterns, head-to-heads, season stats, playing styles, and match circumstances where available. Prefer markets that fit that evidence. Do not invent context or statistics, and do not present speculation as certainty.
 
-Output only the ranked Top 10 grouped by game. No introduction, explanations, confidence essays, or conclusion. Keep it short and concise.
+Give each pick one global rank from 1 to 10. Group picks for the same match under one `### Home - Away` heading. Under each heading, put every pick on its own numbered line, with a blank line between game groups. Keep this format consistent:
+
+### NEC Nijmegen - Groningen
+
+1. Less than 4.5 cards
+
+### Barcelona - Real Madrid
+
+2. Over 2.5 goals
+
+Output only the ranked Top 10 grouped by game. Keep it concise, with no introduction or conclusion.
