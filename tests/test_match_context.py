@@ -40,11 +40,13 @@ def raw_context(*, referee_yellows=500, referee_reds=10, competition_yellows=100
 
 
 class MatchContextTests(unittest.TestCase):
-    def test_odds_filter_uses_only_home_above_1_9_and_no_higher_than_away(self):
-        self.assertTrue(qualifies_for_worth_watching(raw_context(odds=(2.7, 3.0, 2.8))))
-        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(1.9, 3.0, 4.0))))
+    def test_odds_filter_uses_inclusive_home_odds_range_only(self):
+        self.assertTrue(qualifies_for_worth_watching(raw_context(odds=(1.4, 3.0, 4.0))))
+        self.assertTrue(qualifies_for_worth_watching(raw_context(odds=(1.65, 3.0, 1.2))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(1.39, 3.0, 4.0))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(1.66, 3.0, 4.0))))
         self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(2.0, 3.0, 1.9))))
-        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=(2.0, 3.0))))
+        self.assertFalse(qualifies_for_worth_watching(raw_context(odds=None)))
 
     def test_classification_boundaries_and_compact_filtered_object(self):
         self.assertEqual([classify_risk(v) for v in (39, 40, 64, 65)],
@@ -87,7 +89,7 @@ class MatchContextTests(unittest.TestCase):
             {game: {"id": 123, "name": "UEFA Champions League", "season": 2026}},
             {game: False})
         self.assertTrue(combined[game]["stats"]["high_yellow_card_tendency"])
-        self.assertEqual(build_worth_watching({game: raw_context(odds=(1.4, 5, 6))},
+        self.assertEqual(build_worth_watching({game: raw_context(odds=(1.66, 5, 6))},
                                               {game: {"id": 1, "name": "L"}}, {}), {})
         derby_result = build_worth_watching(
             {game: raw_context(odds=(1.5, 4.0, 8.0))},

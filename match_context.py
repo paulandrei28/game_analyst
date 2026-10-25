@@ -9,7 +9,8 @@ try:
 except ImportError:  # pragma: no cover
     from sofascore_match_data import parse_1x2_odds, parse_referee
 
-MIN_WORTH_WATCHING_HOME_ODDS = 1.90
+MIN_WORTH_WATCHING_HOME_ODDS = 1.40
+MAX_WORTH_WATCHING_HOME_ODDS = 1.65
 RISK_LOW_MAX = 39
 RISK_MEDIUM_MAX = 64
 SAMPLE_PRIOR_MATCHES = 8
@@ -59,8 +60,8 @@ def _match_odds(raw_context: Any) -> dict[str, float]:
 
 
 def _odds_qualify(odds: dict[str, float]) -> bool:
-    home, away = odds.get("home_win"), odds.get("away_win")
-    return home is not None and away is not None and home > MIN_WORTH_WATCHING_HOME_ODDS and home <= away
+    home = odds.get("home_win")
+    return home is not None and MIN_WORTH_WATCHING_HOME_ODDS <= home <= MAX_WORTH_WATCHING_HOME_ODDS
 
 
 def qualifies_for_worth_watching(raw_context: Any, *, derby: bool = False) -> bool:

@@ -46,6 +46,11 @@ BONUS_MEDIUM = 10.0
 BONUS_STRONG = 15.0
 BONUS_MAJOR = 20.0
 
+SEASON_ADJUSTMENT_MAX = 20.0
+SEASON_ADJUSTMENT_SCALE = 40.0
+SEASON_SAMPLE_TARGET_MATCHES = 10.0
+SEASON_FINAL_WEIGHT_MULTIPLIER = 3.0
+
 # Positive confirmation bonuses.
 H2H_AGREEMENT_BONUS = BONUS_STRONG
 TEAM_AGREEMENT_BONUS = BONUS_MEDIUM
@@ -1508,7 +1513,8 @@ def season_market_profile(context: Any, category: str) -> tuple[float, float] | 
     matches = [value for row in (home, away) if (value := _finite_number(row.get("matches"))) is not None and value > 0]
     if not matches:
         return None
-    sample_strength = min(1.0, math.sqrt(sum(matches) / len(matches) / 10.0))
+    average_matches = sum(matches) / len(matches)
+    sample_strength = min(1.0, average_matches / SEASON_SAMPLE_TARGET_MATCHES)
 
     if category == "cards_ou":
         def team_cards(row: dict[str, Any]) -> float | None:
@@ -1558,9 +1564,16 @@ def apply_team_season_adjustment(candidate: Candidate, context: Any) -> str:
     is_over = candidate.market.endswith("_over")
     aligned = (over_probability >= 0.5) == is_over
     # A bounded score shift derived from the modeled market probability.
-    # This complements recent streak evidence while limiting season stats to
-    # a secondary influence on the final ranking.
-    magnitude = min(10.0, abs(over_probability - 0.5) * 20.0) * sample_strength
+    # This complements recent streak evidence with a bounded season-level
+    # influence that grows with the available match sample.
+    magnitude = (
+        min(
+            SEASON_ADJUSTMENT_MAX,
+            abs(over_probability - 0.5) * SEASON_ADJUSTMENT_SCALE,
+        )
+        * sample_strength
+    )
+    magnitude *= SEASON_FINAL_WEIGHT_MULTIPLIER
     if magnitude < 0.1:
         return f"Team season average is near {threshold:g} {candidate.category.removesuffix('_ou')}; no adjustment applied."
     if aligned:
@@ -1662,10 +1675,10 @@ class Analyzer:
             )
             for candidate in candidates:
                 score_candidate(candidate, evidences)
-                season_explanation = apply_team_season_adjustment(
+                apply_team_season_adjustment(
                     candidate, (match_context or {}).get(match_name)
                 )
-                explanation = apply_referee_card_adjustment(
+                apply_referee_card_adjustment(
                     candidate,
                     (match_context or {}).get(match_name),
                     bonus=self.referee_card_bonus,
@@ -1699,9 +1712,6 @@ class Analyzer:
                     "bonuses": candidate.bonuses,
                     "penalties": candidate.penalties,
                 }
-                explanations = [item for item in (season_explanation, explanation) if item]
-                if explanations:
-                    prediction["explanations"] = explanations
                 results.append(prediction)
 
         if prediction_threshold is not None:

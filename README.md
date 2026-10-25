@@ -157,7 +157,7 @@ Analysis JSON has a flat payload shape:
 
 The payload also includes a compact `worth_watching` mapping keyed by `Home - Away`.
 A fixture is included when any of these conditions holds: home-win odds are
-above 1.90 and no higher than away-win odds; the fixture is a registered derby;
+between 1.40 and 1.65 inclusive; the fixture is a registered derby;
 or team-stat-based discipline risk is high for penalties, red cards, or yellow
 cards. Draw odds are retained for display but do not affect filtering. Discipline
 risk combines team season rates with competition baselines, and referee rates

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,19 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+PICK_LINE = re.compile(r"^\s*(\d+)\.\s+\S", re.MULTILINE)
+
+
+def validate_ai_pick(ai_pick: str) -> str | None:
+    ranks = [int(match.group(1)) for match in PICK_LINE.finditer(ai_pick)]
+    if not ranks:
+        return "Codex returned no numbered picks; analysis was not changed."
+    if len(ranks) > 10:
+        return f"Codex returned {len(ranks)} picks; the limit is 10. Analysis was not changed."
+    expected = list(range(1, len(ranks) + 1))
+    if ranks != expected:
+        return "Codex pick ranks must be consecutive from 1; analysis was not changed."
+    return None
 
 
 def main() -> int:
@@ -42,6 +56,8 @@ def main() -> int:
     prompt = (
         f"Use the $football-top-10 skill to select predictions for {args.date}. "
         "The analyser candidates and their evidence are below. Select from these candidates only. "
+        "Return no more than 10 picks (or all eligible candidates if fewer), numbered consecutively from 1. "
+        "Count the numbered pick lines before responding and ensure there are no more than 10. "
         "Follow the skill and return only the ranked Top 10 grouped by match.\n\n"
         + json.dumps(payload["predictions"], ensure_ascii=False)
     )
@@ -69,6 +85,10 @@ def main() -> int:
         ai_pick = response_path.read_text(encoding="utf-8").strip()
         if not ai_pick:
             print("Codex returned an empty response; analysis was not changed.", file=sys.stderr)
+            return 1
+        validation_error = validate_ai_pick(ai_pick)
+        if validation_error:
+            print(validation_error, file=sys.stderr)
             return 1
 
     payload["ai_pick"] = ai_pick

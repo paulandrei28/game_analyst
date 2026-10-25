@@ -185,7 +185,7 @@
   ],
   [
     "England",
-    "Republic of Ireland"
+    "Rep. Of Ireland"
   ],
   [
     "England",
@@ -225,7 +225,7 @@
   ],
   [
     "Northern Ireland",
-    "Republic of Ireland"
+    "Rep. Of Ireland"
   ],
   [
     "Poland",
@@ -273,10 +273,10 @@
   ],
   [
     "Aston Villa",
-    "Birmingham City"
+    "Birmingham"
   ],
   [
-    "Blackburn Rovers",
+    "Blackburn",
     "Burnley"
   ],
   [
@@ -292,7 +292,7 @@
     "Tottenham Hotspur"
   ],
   [
-    "West Ham United",
+    "West Ham",
     "Tottenham Hotspur"
   ],
   [
@@ -304,48 +304,48 @@
     "Crystal Palace"
   ],
   [
-    "Norwich City",
-    "Ipswich Town"
+    "Norwich",
+    "Ipswich"
   ],
   [
-    "Sheffield United",
+    "Sheffield Utd",
     "Sheffield Wednesday"
   ],
   [
-    "West Bromwich Albion",
-    "Wolverhampton Wanderers"
+    "West Brom",
+    "Wolves"
   ],
   [
     "Bristol City",
     "Bristol Rovers"
   ],
   [
-    "Queens Park Rangers",
+    "QPR",
     "Brentford"
   ],
   [
     "Millwall",
-    "West Ham United"
+    "West Ham"
   ],
   [
     "Celtic",
     "Rangers"
   ],
   [
-    "Heart of Midlothian",
+    "Heart Of Midlothian",
     "Hibernian"
   ],
   [
-    "Dundee United",
+    "Dundee Utd",
     "Aberdeen"
   ],
   [
-    "Dundee FC",
-    "Dundee United"
+    "Dundee",
+    "Dundee Utd"
   ],
   [
-    "Cardiff City",
-    "Swansea City"
+    "Cardiff",
+    "Swansea"
   ],
   [
     "Linfield",
@@ -369,7 +369,7 @@
   ],
   [
     "Real Madrid",
-    "Atlético Madrid"
+    "Atletico Madrid"
   ],
   [
     "Sevilla",
@@ -385,7 +385,7 @@
   ],
   [
     "Celta Vigo",
-    "Deportivo La Coruña"
+    "Deportivo La Coruna"
   ],
   [
     "Barcelona",
@@ -397,27 +397,27 @@
   ],
   [
     "Benfica",
-    "Porto"
+    "FC Porto"
   ],
   [
     "Benfica",
     "Sporting CP"
   ],
   [
-    "Porto",
+    "FC Porto",
     "Boavista"
   ],
   [
-    "Braga",
+    "SC Braga",
     "Vitória SC"
   ],
   [
-    "Paris Saint-Germain",
+    "Paris Saint Germain",
     "Marseille"
   ],
   [
     "Lyon",
-    "Saint-Étienne"
+    "Saint Etienne"
   ],
   [
     "Lille",
@@ -437,14 +437,14 @@
   ],
   [
     "AC Milan",
-    "Inter Milan"
+    "Inter"
   ],
   [
-    "Inter Milan",
+    "Inter",
     "Juventus"
   ],
   [
-    "Roma",
+    "AS Roma",
     "Lazio"
   ],
   [
@@ -452,7 +452,7 @@
     "Torino"
   ],
   [
-    "Roma",
+    "AS Roma",
     "Napoli"
   ],
   [
@@ -480,12 +480,12 @@
     "Bologna"
   ],
   [
-    "Bayern Munich",
+    "Bayern München",
     "Borussia Dortmund"
   ],
   [
     "Borussia Dortmund",
-    "Schalke 04"
+    "FC Schalke 04"
   ],
   [
     "Hamburger SV",
@@ -496,7 +496,7 @@
     "Union Berlin"
   ],
   [
-    "Bayern Munich",
+    "Bayern München",
     "1860 Munich"
   ],
   [
@@ -525,14 +525,14 @@
   ],
   [
     "Anderlecht",
-    "Standard Liège"
+    "Standard Liege"
   ],
   [
-    "Royal Antwerp",
-    "Beerschot"
+    "Antwerp",
+    "Beerschot VA"
   ],
   [
-    "Club Brugge",
+    "Club Brugge KV",
     "Cercle Brugge"
   ],
   [
@@ -540,8 +540,8 @@
     "Grasshopper Club Zürich"
   ],
   [
-    "Austria Wien",
-    "Rapid Wien"
+    "Austria Vienna",
+    "Rapid Vienna"
   ],
   [
     "Brøndby IF",
@@ -561,14 +561,14 @@
   ],
   [
     "Vålerenga",
-    "Lillestrøm"
+    "Lillestrom"
   ],
   [
     "HJK Helsinki",
     "HIFK"
   ],
   [
-    "Olympiacos",
+    "Olympiakos Piraeus",
     "Panathinaikos"
   ],
   [
@@ -580,7 +580,7 @@
     "Iraklis"
   ],
   [
-    "AEK Athens",
+    "AEK Athens FC",
     "Panathinaikos"
   ],
   [
@@ -597,11 +597,11 @@
   ],
   [
     "Dinamo Zagreb",
-    "Hajduk Split"
+    "HNK Hajduk Split"
   ],
   [
-    "Hajduk Split",
-    "Rijeka"
+    "HNK Hajduk Split",
+    "HNK Rijeka"
   ],
   [
     "Dinamo Zagreb",
@@ -645,10 +645,10 @@
   ],
   [
     "FCSB",
-    "Dinamo București"
+    "Dinamo Bucuresti"
   ],
   [
-    "CFR Cluj",
+    "CFR 1907 Cluj",
     "Universitatea Cluj"
   ],
   [
@@ -657,15 +657,15 @@
   ],
   [
     "Politehnica Iași",
-    "FC Botoșani"
+    "FC Botosani"
   ],
   [
-    "Petrolul Ploiești",
-    "Rapid București"
+    "Petrolul Ploiesti",
+    "Rapid"
   ],
   [
-    "Rapid București",
-    "Dinamo București"
+    "Rapid",
+    "Dinamo Bucuresti"
   ],
   [
     "FCSB",
@@ -684,15 +684,15 @@
     "Polonia Warsaw"
   ],
   [
-    "Sparta Prague",
-    "Slavia Prague"
+    "Sparta Praha",
+    "Slavia Praha"
   ],
   [
     "Slovan Bratislava",
     "Inter Bratislava"
   ],
   [
-    "Ferencváros",
+    "Ferencvarosi TC",
     "Újpest"
   ],
   [
@@ -713,11 +713,11 @@
   ],
   [
     "Neftçi Baku",
-    "Qarabağ"
+    "Qarabag"
   ],
   [
     "APOEL",
-    "Omonia"
+    "Omonia Nicosia"
   ],
   [
     "Boca Juniors",
@@ -729,19 +729,19 @@
   ],
   [
     "Rosario Central",
-    "Newell's Old Boys"
+    "Newells Old Boys"
   ],
   [
-    "Estudiantes",
+    "Estudiantes L.P.",
     "Gimnasia y Esgrima La Plata"
   ],
   [
-    "Belgrano",
-    "Talleres"
+    "Belgrano Cordoba",
+    "Talleres Cordoba"
   ],
   [
     "Godoy Cruz",
-    "Independiente Rivadavia"
+    "Independ. Rivadavia"
   ],
   [
     "Colón",
@@ -749,7 +749,7 @@
   ],
   [
     "San Lorenzo",
-    "Huracán"
+    "Huracan"
   ],
   [
     "River Plate",
@@ -765,11 +765,11 @@
   ],
   [
     "Palmeiras",
-    "São Paulo"
+    "Sao Paulo"
   ],
   [
     "Corinthians",
-    "São Paulo"
+    "Sao Paulo"
   ],
   [
     "Corinthians",
@@ -781,7 +781,7 @@
   ],
   [
     "Flamengo",
-    "Vasco da Gama"
+    "Vasco DA Gama"
   ],
   [
     "Botafogo",
@@ -792,7 +792,7 @@
     "Fluminense"
   ],
   [
-    "Grêmio",
+    "Gremio",
     "Internacional"
   ],
   [
@@ -801,7 +801,7 @@
   ],
   [
     "Bahia",
-    "Vitória"
+    "Vitoria"
   ],
   [
     "Ceará",
@@ -809,7 +809,7 @@
   ],
   [
     "Coritiba",
-    "Athletico Paranaense"
+    "Atletico Paranaense"
   ],
   [
     "Náutico",
@@ -1012,7 +1012,7 @@
     "Tupynambás"
   ],
   [
-    "Athletico Paranaense",
+    "Atletico Paranaense",
     "Paraná Clube"
   ],
   [
