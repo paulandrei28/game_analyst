@@ -4,7 +4,16 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+
+def _read_and_log(stream, logger: logging.Logger, command_name: str, level: int) -> str:
+    chunks: list[str] = []
+    for line in stream:
+        chunks.append(line)
+        logger.log(level, "[%s] %s", command_name, line.rstrip("\r\n"))
+    return "".join(chunks)
 
 
 def run_logged(
@@ -14,19 +23,36 @@ def run_logged(
     logger: logging.Logger,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    with subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        bufsize=1,
+    ) as process:
+        assert process.stdout is not None
+        assert process.stderr is not None
+        with ThreadPoolExecutor(max_workers=2) as readers:
+            stdout_future = readers.submit(
+                _read_and_log, process.stdout, logger, command[0], logging.INFO
+            )
+            stderr_future = readers.submit(
+                _read_and_log, process.stderr, logger, command[0], logging.ERROR
+            )
+            returncode = process.wait()
+            stdout = stdout_future.result()
+            stderr = stderr_future.result()
 
-    for line in result.stdout.splitlines():
-        logger.info("[%s] %s", command[0], line)
-    for line in result.stderr.splitlines():
-        logger.error("[%s] %s", command[0], line)
+    result = subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
     if check and result.returncode:
         raise subprocess.CalledProcessError(
             result.returncode,
             result.args,
-            output=result.stdout,
-            stderr=result.stderr,
+            output=stdout,
+            stderr=stderr,
         )
     return result
 
@@ -51,15 +77,18 @@ def publish_pages_repository(
         raise subprocess.CalledProcessError(
             commit.returncode,
             commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
+            output=commit.stdout or "",
+            stderr=commit.stderr or "",
         )
-    if commit.returncode == 1 and "nothing to commit" not in commit.stdout.lower():
+    if (
+        commit.returncode == 1
+        and "nothing to commit" not in (commit.stdout or "").lower()
+    ):
         raise subprocess.CalledProcessError(
             commit.returncode,
             commit.args,
-            output=commit.stdout,
-            stderr=commit.stderr,
+            output=commit.stdout or "",
+            stderr=commit.stderr or "",
         )
 
     run_command(["git", "push", "origin", "main"], cwd=repository_dir)

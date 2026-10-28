@@ -98,8 +98,10 @@ def main() -> None:
             entry["date"] not in previously_published_dates
             for entry in published_entries
         )
-        if uploaded_new_report:
+        if uploaded_new_report and len(published_entries) > 1:
             archive_oldest_report(BETMAN_DIR)
+        elif uploaded_new_report:
+            logger.info("Only one report is available; skipping oldest-report cleanup.")
         else:
             logger.info("No new report was uploaded; skipping oldest-report cleanup.")
 
@@ -119,7 +121,10 @@ def main() -> None:
 
     finally:
         logger.info("Nightly runner finished.")
-        _put_pc_to_sleep()
+        try:
+            _put_pc_to_sleep()
+        except Exception:
+            logger.exception("Could not put the PC to sleep.")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ description: Select and present a concise, balanced Top 10 from the football ana
 
 Select up to 10 of the strongest defensible predictions, using score, prediction strength, confidence, evidence, and football judgment. Never rank by score alone. Exclude any candidate with a conflict noted for it. If fewer than 10 defensible predictions remain, return only those. Never add an eleventh pick or force a weak or conflicted prediction to fill the list.
 
+For a given match, do not select both `both teams scoring` and either team's `no clean sheet` market. BTTS already entails that neither team keeps a clean sheet, so the no-clean-sheet pick adds no new outcome information. This rule applies regardless of which pick would rank higher.
+
 Build a genuinely varied list across matches and market types. Compare all available options, such as goals, both teams to score, team totals, match result or double chance, corners, and cards. Avoid relying on one market type (especially cards) just because its candidates rank highly; use at most three picks from the same market type unless the candidate pool clearly leaves no sound alternatives. Include both Over and Under picks when supported. Look beyond the very top-ranked candidates for credible alternatives, but never force a weak or conflicted pick.
 
 Judge each pick in its match context: use the supplied form, home/away performance, scoring and conceding patterns, head-to-heads, season stats, playing styles, and match circumstances where available. Prefer markets that fit that evidence. Do not invent context or statistics, and do not present speculation as certainty.

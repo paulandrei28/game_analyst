@@ -352,6 +352,12 @@ async def run(home: str, away: str, target_date: date) -> int:
             event_id = match["event_id"]
             try:
                 event = await client.fetch("event", event_id=event_id)
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.exception("Event detail request failed")
+                event = None
+                print(f"Event details unavailable: {_request_error(exc)}")
             except Exception as exc:
                 LOGGER.exception("Event detail request failed")
                 event = None
@@ -361,6 +367,12 @@ async def run(home: str, away: str, target_date: date) -> int:
                 odds = parse_1x2_odds(odds_payload)
                 if not odds:
                     LOGGER.warning("No recognized full-time 1X2 outcomes. Response keys=%s", list(_mapping(odds_payload)))
+            except SofascoreHTTPError as exc:
+                if exc.status_code in {403, 429}:
+                    raise
+                LOGGER.exception("1X2 odds request failed")
+                odds = []
+                print(f"Odds request failed: {_request_error(exc)}")
             except Exception as exc:
                 LOGGER.exception("1X2 odds request failed")
                 odds = []
@@ -374,10 +386,18 @@ async def run(home: str, away: str, target_date: date) -> int:
             if referee_brief.get("id") is not None:
                 try:
                     referee_details = await client.fetch("referee", referee_id=referee_brief["id"])
+                except SofascoreHTTPError as exc:
+                    if exc.status_code in {403, 429}:
+                        raise
+                    LOGGER.warning("Referee profile request failed: %s", exc)
                 except Exception as exc:
                     LOGGER.warning("Referee profile request failed: %s", exc)
                 try:
                     stats = await client.fetch("referee_statistics", referee_id=referee_brief["id"])
+                except SofascoreHTTPError as exc:
+                    if exc.status_code in {403, 429}:
+                        raise
+                    LOGGER.warning("Referee statistics request failed: %s", exc)
                 except Exception as exc:
                     LOGGER.warning("Referee statistics request failed: %s", exc)
             referee = parse_referee(event, referee_details, stats)
@@ -396,6 +416,11 @@ async def run(home: str, away: str, target_date: date) -> int:
                         team["id"], tournament_id, season_id, statistics_type="overall"
                     )
                     team_season_stats[side] = parse_team_statistics(raw_stats) if raw_stats else None
+                except SofascoreHTTPError as exc:
+                    if exc.status_code in {403, 429}:
+                        raise
+                    LOGGER.warning("Team season statistics request failed for %s: %s", side, exc)
+                    team_season_stats[side] = None
                 except Exception as exc:
                     LOGGER.warning("Team season statistics request failed for %s: %s", side, exc)
                     team_season_stats[side] = None

@@ -41,31 +41,63 @@ def get_filtered_matches(
         raise RuntimeError("API_FOOTBALL_API_KEY is not set")
 
     LOGGER.info("Requesting fixtures for date: %s", target_date)
-    try:
-        response = requests.get(
-            BASE_URL,
-            headers={"x-apisports-key": key},
-            params={"date": target_date},
-            timeout=api_timeout_seconds,
+    matches: list[dict] = []
+    total_pages = 1
+    page = 1
+    while page <= total_pages:
+        params: dict[str, str | int] = {"date": target_date}
+        if page > 1:
+            params["page"] = page
+        try:
+            response = requests.get(
+                BASE_URL,
+                headers={"x-apisports-key": key},
+                params=params,
+                timeout=api_timeout_seconds,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError):
+            LOGGER.exception(
+                "Could not fetch fixtures for %s (page %d)", target_date, page
+            )
+            raise
+
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Unexpected fixture API response for {target_date} page {page}"
+            )
+
+        api_errors = payload.get("errors", [])
+        if api_errors:
+            LOGGER.warning(
+                "API returned internal error flags on page %d: %s",
+                page,
+                api_errors,
+            )
+
+        paging = payload.get("paging", {})
+        if isinstance(paging, dict):
+            try:
+                total_pages = max(total_pages, int(paging.get("total", 1)))
+            except (TypeError, ValueError, OverflowError):
+                LOGGER.warning("Invalid fixture pagination metadata: %r", paging)
+
+        page_matches = payload.get("response", [])
+        if not isinstance(page_matches, list):
+            raise ValueError(
+                f"Unexpected fixture list for {target_date} page {page}"
+            )
+        matches.extend(match for match in page_matches if isinstance(match, dict))
+        LOGGER.info(
+            "Fixture API page %d/%d returned %d fixtures",
+            page,
+            total_pages,
+            len(page_matches),
         )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        LOGGER.exception("Could not fetch fixtures for %s", target_date)
-        raise
+        page += 1
 
-    api_errors = payload.get("errors", [])
-    if api_errors:
-        LOGGER.warning("API returned internal error flags: %s", api_errors)
-
-    paging = payload.get("paging", {})
-    LOGGER.info(
-        "Total raw fixtures returned by API: %s | Pages: %s/%s",
-        payload.get("results", 0),
-        paging.get("current", 1),
-        paging.get("total", 1),
-    )
-    matches = payload.get("response", [])
+    LOGGER.info("Total raw fixtures returned by API: %d", len(matches))
     if allowed_league_ids is None:
         try:
             from .config import load_config

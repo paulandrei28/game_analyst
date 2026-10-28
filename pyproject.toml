@@ -22,3 +22,6 @@ packages = ["game_analyst"]
 
 [tool.setuptools.package-dir]
 game_analyst = "."
+
+[tool.setuptools.package-data]
+game_analyst = ["derby_games_scoped.json"]
