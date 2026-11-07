@@ -13,7 +13,7 @@ from typing import Any
 from .config import AppConfig, DEFAULT_CONFIG_PATH, load_config
 from .derby_matcher import DerbyMatcher
 from .generate_analysis import AnalysisGenerator
-from .match_context import build_worth_watching, qualifies_for_worth_watching
+from .match_context import build_worth_watching
 from .report_generator import HumanReadableReport
 from .fixtures_scraper import (
     DATE_OPTIONS,
@@ -108,9 +108,6 @@ async def run_pipeline(
             request_max_retries=settings.sofascore_request_max_retries,
             search_timeout_seconds=settings.sofascore_search_timeout_seconds,
             statistics_cache_dir=output_root / "sofascore_statistics",
-            worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
-                game, context, fixture_metadata, derby_matcher
-            ),
             initial_streaks=partial_streaks,
             initial_contexts=partial_contexts,
             progress_callback=checkpoint_progress,
@@ -140,7 +137,7 @@ async def run_pipeline(
             )
             fixture_metadata = {}
 
-        if match_context is None:
+        if match_context is None or _needs_referee_refresh(match_context, fixture_games or []):
             try:
                 if fixture_games is None:
                     fixture_games, _, _ = load_or_fetch_fixtures_with_metadata(
@@ -154,6 +151,8 @@ async def run_pipeline(
                         progress_path,
                         fixture_games,
                     )
+                    initial_contexts = dict(match_context or {})
+                    initial_contexts.update(partial_contexts)
 
                     def checkpoint_progress(
                         current_streaks: dict[str, Any],
@@ -179,18 +178,15 @@ async def run_pipeline(
                         request_max_retries=settings.sofascore_request_max_retries,
                         search_timeout_seconds=settings.sofascore_search_timeout_seconds,
                         statistics_cache_dir=output_root / "sofascore_statistics",
-                        worth_watching_qualifier=lambda game, context: _qualifies_for_worth_watching(
-                            game, context, fixture_metadata, derby_matcher
-                        ),
                         initial_streaks=partial_streaks,
-                        initial_contexts=partial_contexts,
+                        initial_contexts=initial_contexts,
                         progress_callback=checkpoint_progress,
                     )
                     _save_json(match_context, context_path)
                     progress_path.unlink(missing_ok=True)
             except Exception:
                 LOGGER.warning("Match context unavailable; referee scoring will be skipped", exc_info=True)
-                match_context = {}
+                match_context = match_context or {}
 
     generator = AnalysisGenerator(
         enabled_markets=settings.enabled_markets,
@@ -316,12 +312,22 @@ def _split_match(match_name: str) -> tuple[str, str]:
     return (home.strip(), away.strip()) if separator else ("", "")
 
 
-def _qualifies_for_worth_watching(game: str, context: Any, metadata: dict[str, Any], matcher: DerbyMatcher) -> bool:
-    """Avoid referee and aggregate-stat requests for excluded games."""
-    if game not in metadata:
-        return False
-    home, away = _split_match(game)
-    return qualifies_for_worth_watching(context, derby=matcher.is_derby(home, away))
+def _needs_referee_refresh(match_context: Any, games: list[str]) -> bool:
+    """Return whether cached fixtures lack a completed referee lookup."""
+    if not isinstance(match_context, dict):
+        return True
+    for game in games:
+        context = match_context.get(game)
+        referee = context.get("referee") if isinstance(context, dict) else None
+        if not (
+            isinstance(referee, dict)
+            and (
+                referee.get("event_id") is not None
+                or isinstance(referee.get("referee"), dict)
+            )
+        ):
+            return True
+    return False
 
 
 def _missing_team_statistics(context: Any) -> bool:

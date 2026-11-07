@@ -148,8 +148,27 @@ async def fetch_team_match_data(
                 and cached_context.get("event_id") is not None
             )
             needs_context = include_context and not has_context
+            cached_referee = (
+                cached_context.get("referee")
+                if isinstance(cached_context, dict)
+                else None
+            )
+            # Earlier pipeline runs fetched referees only for Worth Watching
+            # candidates and stored None for the other fixtures. Revisit those
+            # contexts once so all predictions can use referee card averages.
+            needs_referee = (
+                include_context
+                and has_context
+                and not (
+                    isinstance(cached_referee, dict)
+                    and (
+                        cached_referee.get("event_id") is not None
+                        or isinstance(cached_referee.get("referee"), dict)
+                    )
+                )
+            )
             needs_streaks = include_streaks and display_key not in results
-            if not needs_context and not needs_streaks:
+            if not needs_context and not needs_streaks and not needs_referee:
                 continue
 
             try:
@@ -215,8 +234,12 @@ async def fetch_team_match_data(
                     except Exception:
                         LOGGER.debug("Could not retrieve 1X2 odds for %s", display_key, exc_info=True)
 
-                    # Resolve eligibility from odds and the local derby list
-                    # before requesting referee or historical discipline data.
+                else:
+                    context = cached_context
+
+                if needs_context or needs_referee:
+                    # Referee averages adjust card-market predictions, so fetch
+                    # them for every fixture regardless of Worth Watching status.
                     eligible = worth_watching_qualifier(display_key, context) if worth_watching_qualifier else True
                     if eligible:
                         try:
